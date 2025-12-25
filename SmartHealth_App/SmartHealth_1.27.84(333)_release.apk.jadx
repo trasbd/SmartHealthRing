@@ -1,0 +1,100 @@
+{
+  "projectVersion": 2,
+  "files": [
+    "..\\..\\..\\..\\..\\..\\Downloads\\SmartHealth_1.27.84(333)_release.apk"
+  ],
+  "treeExpansionsV2": [
+    "c:com.yucheng.smarthealthpro.MyApplication",
+    "c:com.alibaba.fastjson2.JSONB"
+  ],
+  "codeData": {
+    "comments": [],
+    "renames": []
+  },
+  "openTabs": [
+    {
+      "type": "class",
+      "tabPath": "com.yucheng.smarthealthpro.service.MyBleService",
+      "subPath": "java",
+      "caret": 2366,
+      "view": {
+        "x": 0,
+        "y": 914
+      },
+      "active": false,
+      "pinned": false,
+      "bookmarked": false,
+      "hidden": false,
+      "previewTab": false
+    },
+    {
+      "type": "class",
+      "tabPath": "com.yucheng.smarthealthpro.MyApplication",
+      "subPath": "java",
+      "caret": 4680,
+      "view": {
+        "x": 0,
+        "y": 3094
+      },
+      "active": false,
+      "pinned": false,
+      "bookmarked": false,
+      "hidden": false,
+      "previewTab": false
+    },
+    {
+      "type": "class",
+      "tabPath": "com.alibaba.fastjson2.JSONB",
+      "subPath": "java",
+      "caret": 3080,
+      "view": {
+        "x": 0,
+        "y": 788
+      },
+      "active": true,
+      "pinned": false,
+      "bookmarked": false,
+      "hidden": false,
+      "previewTab": false
+    },
+    {
+      "type": "class",
+      "tabPath": "com.yucheng.smarthealthpro.repository.BodyDataRepository",
+      "subPath": "java",
+      "caret": 18387,
+      "view": {
+        "x": 0,
+        "y": 4548
+      },
+      "active": false,
+      "pinned": false,
+      "bookmarked": false,
+      "hidden": false,
+      "previewTab": false
+    },
+    {
+      "type": "class",
+      "tabPath": "com.yucheng.ycbtsdk.Constants",
+      "subPath": "java",
+      "caret": 20925,
+      "view": {
+        "x": 0,
+        "y": 5668
+      },
+      "active": false,
+      "pinned": false,
+      "bookmarked": false,
+      "hidden": false,
+      "previewTab": false
+    }
+  ],
+  "cacheDir": "C:\\Users\\thoma\\AppData\\Local\\skylot\\jadx\\cache\\projects\\SmartHealth_1.27.84(333)_release-77637ef00dc371d222f6519ab8e7193d",
+  "enableLiveReload": false,
+  "searchHistory": [
+    "BC_INT32_SHORT_MAX",
+    "256"
+  ],
+  "searchResourcesFilter": "*",
+  "searchResourcesSizeLimit": 0,
+  "pluginOptions": {}
+}
