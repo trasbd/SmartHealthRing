@@ -368,6 +368,12 @@ class HealthSession:
     EndCommand = 1408
     EndPayload = bytes([0])
 
+    SleepTypes = {
+        241: "Deep Sleep",
+        242: "Light Sleep",
+        243: "REM",
+    }
+
     def __init__(self):
         self.health_type: int | None = None
         self.blocks: list[bytes] = []
