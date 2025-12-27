@@ -141,7 +141,6 @@ class MainActivity : ComponentActivity() {
         }
 
 
-
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
 
@@ -226,8 +225,8 @@ class MainActivity : ComponentActivity() {
         ) {
             Log.d(
                 "RingBridge", "NOTIFY ${characteristic.uuid}: ${
-                    value.joinToString(" ") { "%02X".format(it) }
-                }")
+                value.joinToString(" ") { "%02X".format(it) }
+            }")
 
             // Fire-and-forget coroutine (matches asyncio.create_task)
             CoroutineScope(Dispatchers.IO).launch {
@@ -237,13 +236,11 @@ class MainActivity : ComponentActivity() {
                     val full = reassembleFrame(value) ?: return@withLock
                     val frame = decodeFrame(full)
                     Log.d(
-                        "RingBridge",
-                        "Received ${frame.group} ${frame.subtype} ${
-                            frame.payload.joinToString(" ") {
-                                "%02X".format(it)
-                            }
-                        }"
-                    )
+                        "RingBridge", "Received ${frame.group} ${frame.subtype} ${
+                        frame.payload.joinToString(" ") {
+                            "%02X".format(it)
+                        }
+                    }")
                     handleFrame(frame.group, frame.subtype, frame.payload)
                 }
             }
@@ -387,45 +384,59 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    suspend fun sendToHealthConnect(data: Any)
-    {
-        when(data){
+    suspend fun sendToHealthConnect(data: Any) {
+        when (data) {
             is HealthSession.SleepResult -> sendSleepToHealthConnect(data)
             is HealthSession.HealthHistoryResult -> sendAllToHealthConnect(data)
         }
     }
 
-    suspend fun sendAllToHealthConnect(data: HealthSession.HealthHistoryResult)
-    {
+    suspend fun sendAllToHealthConnect(data: HealthSession.HealthHistoryResult) {
         val hrRecords = mutableListOf<HeartRateRecord>()
 
 
 
-        data.data.forEach { session->
+        data.data.forEach { session ->
             val start = Instant.ofEpochMilli(session.startTime)
-            val end = Instant.ofEpochMilli(session.startTime + 30*1000)
-            val samples = mutableListOf(HeartRateRecord.Sample(start,
-                session.heartValue.toLong()))
+            val end = Instant.ofEpochMilli(session.startTime + 30 * 1000)
+            val samples = mutableListOf(
+                HeartRateRecord.Sample(
+                    start, session.heartValue.toLong()
+                )
+            )
             val meta = Metadata.autoRecorded(Device(TYPE_RING))
-            hrRecords.add(HeartRateRecord(start, null, end, null, samples, meta ))
+            hrRecords.add(HeartRateRecord(start, null, end, null, samples, meta))
         }
 
-        val ret =  healthConnectClient.insertRecords(hrRecords)
+        val ret = healthConnectClient.insertRecords(hrRecords)
         Log.d("RingBridge", ret.toString())
     }
 
-    suspend fun sendSleepToHealthConnect(data: HealthSession.SleepResult)
-    {
+    suspend fun sendSleepToHealthConnect(data: HealthSession.SleepResult) {
         val sessions = mutableListOf<SleepSessionRecord>()
         data.data.forEach { it ->
             val segments = mutableListOf<SleepSessionRecord.Stage>()
             it.sleepData.forEach { iit ->
                 val start = Instant.ofEpochMilli(iit.sleepStartTime)
-                val end = Instant.ofEpochMilli(iit.sleepStartTime +(iit.sleepLen*1000))
+                val end = Instant.ofEpochMilli(iit.sleepStartTime + (iit.sleepLen * 1000))
                 val type = HealthSession.SLEEP_TYPES[iit.sleepType]!!
-                val currentSegment = SleepSessionRecord.Stage(start, end, type  )
-                segments.add(currentSegment)
+                if (start < end) {
+                    val currentSegment = SleepSessionRecord.Stage(start, end, type)
+                    segments.add(currentSegment)
+                }
             }
+
+            /*
+            if (it.wakeCount > 0)
+            {
+                val start = Instant.ofEpochMilli(it.startTime - (it.wakeDuration*1000))
+                val end = Instant.ofEpochMilli(it.startTime)
+                val type = SleepSessionRecord.STAGE_TYPE_AWAKE
+                segments.add(SleepSessionRecord.Stage(start, end, type))
+            }
+            val start = Instant.ofEpochMilli(it.startTime - (it.wakeDuration*1000))
+             */
+
             val start = Instant.ofEpochMilli(it.startTime)
             val end = Instant.ofEpochMilli(it.endTime)
             val meta = Metadata.autoRecorded(Device(TYPE_RING))
@@ -443,33 +454,25 @@ class MainActivity : ComponentActivity() {
     }
 
     enum class BlePermissionState {
-        GRANTED,
-        DENIED,
-        PERMANENTLY_DENIED
+        GRANTED, DENIED, PERMANENTLY_DENIED
     }
 
     private fun updateBlePermissionState() {
 
         val connectGranted =
-            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
-                    PackageManager.PERMISSION_GRANTED
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
         val scanGranted =
-            checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) ==
-                    PackageManager.PERMISSION_GRANTED
+            checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
 
         blePermissionState = when {
-            connectGranted && scanGranted ->
-                BlePermissionState.GRANTED
+            connectGranted && scanGranted -> BlePermissionState.GRANTED
 
             ActivityCompat.shouldShowRequestPermissionRationale(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) ->
-                BlePermissionState.DENIED
+                this, Manifest.permission.BLUETOOTH_CONNECT
+            ) -> BlePermissionState.DENIED
 
-            else ->
-                BlePermissionState.PERMANENTLY_DENIED
+            else -> BlePermissionState.PERMANENTLY_DENIED
         }
     }
 
@@ -492,15 +495,17 @@ class MainActivity : ComponentActivity() {
     )
 
     // Create the permissions launcher
-    val requestPermissionActivityContract = PermissionController.createRequestPermissionResultContract()
+    val requestPermissionActivityContract =
+        PermissionController.createRequestPermissionResultContract()
 
-    val requestPermissions = registerForActivityResult(requestPermissionActivityContract) { granted ->
-        if (granted.containsAll(PERMISSIONS)) {
-            // Permissions successfully granted
-        } else {
-            // Lack of required permissions
+    val requestPermissions =
+        registerForActivityResult(requestPermissionActivityContract) { granted ->
+            if (granted.containsAll(PERMISSIONS)) {
+                // Permissions successfully granted
+            } else {
+                // Lack of required permissions
+            }
         }
-    }
 
     suspend fun checkPermissionsAndRun(healthConnectClient: HealthConnectClient) {
         val granted = healthConnectClient.permissionController.getGrantedPermissions()
@@ -519,12 +524,10 @@ class MainActivity : ComponentActivity() {
     }
 
 
-private lateinit var healthConnectClient: HealthConnectClient
+    private lateinit var healthConnectClient: HealthConnectClient
 
 
-
-
-private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
+    private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
 
     private fun openAppSettings() {
         val intent = Intent(
@@ -557,7 +560,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
                     isReady = isReady,
                     blePermissionState = blePermissionState,
                     onRequestData = { requestHealthData() },
-                    onRequestHealthConnect = {requestHealthConnectPermissions()},
+                    onRequestHealthConnect = { requestHealthConnectPermissions() },
                     onConnect = { startBle() },
                     onOpenSettings = { openAppSettings() })
             }
@@ -597,7 +600,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
         }
 
 
-        //send(0x0504) // 1284 sleep
+        SendCmd(0x0504) // 1284 sleep
         SendCmd(1289)
     }
 
@@ -623,9 +626,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
     private fun SendPending(pending: PendingCommand) {
         val frame = buildBe94Frame(pending.cmd, pending.payload)
         bluetoothGatt.writeCharacteristic(
-            be94WriteChar,
-            frame,
-            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            be94WriteChar, frame, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         )
         cmdAck = false
         Log.d("RingBridge", "Sent ${pending.cmd} " + frame.joinToString(" ") { "%02X".format(it) })
@@ -728,8 +729,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
         }
 
         fun parse(): Any {
-            val type = healthType
-                ?: throw IllegalStateException("No health session active")
+            val type = healthType ?: throw IllegalStateException("No health session active")
 
             // Concatenate payload blocks
             val totalLen = blocks.sumOf { it.size }
@@ -757,8 +757,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
 
         @Suppress("unused", "UnusedVariable")
         fun unpackHealthHistoryAll(
-            raw: ByteArray,
-            healthType: Int
+            raw: ByteArray, healthType: Int
         ): HealthHistoryResult {
 
 
@@ -776,21 +775,15 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
 
                 // ---- timestamp ----
                 val tsSec =
-                    (raw[i].toInt() and 0xFF) or
-                            ((raw[i + 1].toInt() and 0xFF) shl 8) or
-                            ((raw[i + 2].toInt() and 0xFF) shl 16) or
-                            ((raw[i + 3].toInt() and 0xFF) shl 24)
+                    (raw[i].toInt() and 0xFF) or ((raw[i + 1].toInt() and 0xFF) shl 8) or ((raw[i + 2].toInt() and 0xFF) shl 16) or ((raw[i + 3].toInt() and 0xFF) shl 24)
 
-                val startTime =
-                    ((tsSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
+                val startTime = ((tsSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
 
-                val startDateTime =
-                    dateFormat.format(Date(startTime))
+                val startDateTime = dateFormat.format(Date(startTime))
 
                 // ---- fields (EXACT mapping) ----
                 val stepValue =
-                    (raw[i + 4].toInt() and 0xFF) or
-                            ((raw[i + 5].toInt() and 0xFF) shl 8)
+                    (raw[i + 4].toInt() and 0xFF) or ((raw[i + 5].toInt() and 0xFF) shl 8)
 
                 val heartValue = raw[i + 6].toInt() and 0xFF
                 val sbpValue = raw[i + 7].toInt() and 0xFF   // unused
@@ -824,8 +817,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
             }
 
             return HealthHistoryResult(
-                dataType = healthType,
-                data = records
+                dataType = healthType, data = records
             )
         }
 
@@ -846,33 +838,23 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
 
                 // ---- session header ----
                 val sessionLen =
-                    (raw[i + 2].toInt() and 0xFF) or
-                            ((raw[i + 3].toInt() and 0xFF) shl 8)
+                    (raw[i + 2].toInt() and 0xFF) or ((raw[i + 3].toInt() and 0xFF) shl 8)
 
                 val startSec =
-                    (raw[i + 4].toInt() and 0xFF) or
-                            ((raw[i + 5].toInt() and 0xFF) shl 8) or
-                            ((raw[i + 6].toInt() and 0xFF) shl 16) or
-                            ((raw[i + 7].toInt() and 0xFF) shl 24)
+                    (raw[i + 4].toInt() and 0xFF) or ((raw[i + 5].toInt() and 0xFF) shl 8) or ((raw[i + 6].toInt() and 0xFF) shl 16) or ((raw[i + 7].toInt() and 0xFF) shl 24)
 
                 val endSec =
-                    (raw[i + 8].toInt() and 0xFF) or
-                            ((raw[i + 9].toInt() and 0xFF) shl 8) or
-                            ((raw[i + 10].toInt() and 0xFF) shl 16) or
-                            ((raw[i + 11].toInt() and 0xFF) shl 24)
+                    (raw[i + 8].toInt() and 0xFF) or ((raw[i + 9].toInt() and 0xFF) shl 8) or ((raw[i + 10].toInt() and 0xFF) shl 16) or ((raw[i + 11].toInt() and 0xFF) shl 24)
 
-                val startTime =
-                    ((startSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
+                val startTime = ((startSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
 
-                val endTime =
-                    ((endSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
+                val endTime = ((endSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
 
                 val startDateTime = dateFormat.format(Date(startTime))
                 val endDateTime = dateFormat.format(Date(endTime))
 
                 val deepSleepCount =
-                    (raw[i + 12].toInt() and 0xFF) or
-                            ((raw[i + 13].toInt() and 0xFF) shl 8)
+                    (raw[i + 12].toInt() and 0xFF) or ((raw[i + 13].toInt() and 0xFF) shl 8)
 
                 // ---- dual interpretation block (EXACT Java behavior) ----
                 val remTotal: Int
@@ -882,32 +864,26 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
 
                 if (deepSleepCount == 0xFFFF) {
                     remTotal =
-                        (raw[i + 14].toInt() and 0xFF) or
-                                ((raw[i + 15].toInt() and 0xFF) shl 8)
+                        (raw[i + 14].toInt() and 0xFF) or ((raw[i + 15].toInt() and 0xFF) shl 8)
 
                     deepTotal =
-                        (raw[i + 16].toInt() and 0xFF) or
-                                ((raw[i + 17].toInt() and 0xFF) shl 8)
+                        (raw[i + 16].toInt() and 0xFF) or ((raw[i + 17].toInt() and 0xFF) shl 8)
 
                     lightTotal =
-                        (raw[i + 18].toInt() and 0xFF) or
-                                ((raw[i + 19].toInt() and 0xFF) shl 8)
+                        (raw[i + 18].toInt() and 0xFF) or ((raw[i + 19].toInt() and 0xFF) shl 8)
 
                     lightCount = 0
                 } else {
                     lightCount =
-                        (raw[i + 14].toInt() and 0xFF) or
-                                ((raw[i + 15].toInt() and 0xFF) shl 8)
+                        (raw[i + 14].toInt() and 0xFF) or ((raw[i + 15].toInt() and 0xFF) shl 8)
 
                     remTotal = 0
 
                     deepTotal =
-                        ((raw[i + 16].toInt() and 0xFF) or
-                                ((raw[i + 17].toInt() and 0xFF) shl 8)) * 60
+                        ((raw[i + 16].toInt() and 0xFF) or ((raw[i + 17].toInt() and 0xFF) shl 8)) * 60
 
                     lightTotal =
-                        ((raw[i + 18].toInt() and 0xFF) or
-                                ((raw[i + 19].toInt() and 0xFF) shl 8)) * 60
+                        ((raw[i + 18].toInt() and 0xFF) or ((raw[i + 19].toInt() and 0xFF) shl 8)) * 60
                 }
 
                 // ---- parse sleep segments ----
@@ -924,18 +900,12 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
                     val sleepType = raw[segPtr].toInt() and 0xFF
 
                     val segSec =
-                        (raw[segPtr + 1].toInt() and 0xFF) or
-                                ((raw[segPtr + 2].toInt() and 0xFF) shl 8) or
-                                ((raw[segPtr + 3].toInt() and 0xFF) shl 16) or
-                                ((raw[segPtr + 4].toInt() and 0xFF) shl 24)
+                        (raw[segPtr + 1].toInt() and 0xFF) or ((raw[segPtr + 2].toInt() and 0xFF) shl 8) or ((raw[segPtr + 3].toInt() and 0xFF) shl 16) or ((raw[segPtr + 4].toInt() and 0xFF) shl 24)
 
-                    val segTime =
-                        ((segSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
+                    val segTime = ((segSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
 
                     val dur =
-                        (raw[segPtr + 5].toInt() and 0xFF) or
-                                ((raw[segPtr + 6].toInt() and 0xFF) shl 8) or
-                                ((raw[segPtr + 7].toInt() and 0xFF) shl 16)
+                        (raw[segPtr + 5].toInt() and 0xFF) or ((raw[segPtr + 6].toInt() and 0xFF) shl 8) or ((raw[segPtr + 7].toInt() and 0xFF) shl 16)
 
                     if (sleepType == 244) { // wake
                         wakeCount++
@@ -978,8 +948,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
             }
 
             return SleepResult(
-                dataType = healthType,
-                data = sessions
+                dataType = healthType, data = sessions
             )
         }
 
@@ -998,9 +967,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
         )
 
         data class HealthHistoryResult(
-            val code: Int = 0,
-            val dataType: Int,
-            val data: List<HealthHistoryRecord>
+            val code: Int = 0, val dataType: Int, val data: List<HealthHistoryRecord>
         )
 
         data class SleepSegment(
@@ -1026,9 +993,7 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
         )
 
         data class SleepResult(
-            val code: Int = 0,
-            val dataType: Int,
-            val data: List<SleepSession>
+            val code: Int = 0, val dataType: Int, val data: List<SleepSession>
         )
 
 
@@ -1058,8 +1023,7 @@ fun MainScreen(
         ) {
 
             Text(
-                text = "Ring Bridge",
-                style = MaterialTheme.typography.headlineMedium
+                text = "Ring Bridge", style = MaterialTheme.typography.headlineMedium
             )
 
             /* ---------------- Bluetooth Permission ---------------- */
@@ -1070,8 +1034,7 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Bluetooth Permission",
-                        style = MaterialTheme.typography.titleMedium
+                        text = "Bluetooth Permission", style = MaterialTheme.typography.titleMedium
                     )
 
                     when (blePermissionState) {
@@ -1095,8 +1058,7 @@ fun MainScreen(
                             )
 
                             Button(
-                                onClick = onOpenSettings,
-                                modifier = Modifier.padding(top = 8.dp)
+                                onClick = onOpenSettings, modifier = Modifier.padding(top = 8.dp)
                             ) {
                                 Text("Open App Settings")
                             }
@@ -1113,8 +1075,7 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Health Connect",
-                        style = MaterialTheme.typography.titleMedium
+                        text = "Health Connect", style = MaterialTheme.typography.titleMedium
                     )
 
                     Button(onClick = onRequestHealthConnect) {
@@ -1131,8 +1092,7 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Ring Status",
-                        style = MaterialTheme.typography.titleMedium
+                        text = "Ring Status", style = MaterialTheme.typography.titleMedium
                     )
 
                     StatusRow(
