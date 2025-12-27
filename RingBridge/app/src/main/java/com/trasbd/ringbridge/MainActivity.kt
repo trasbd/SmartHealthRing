@@ -39,6 +39,9 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.*
+import androidx.health.connect.client.records.metadata.Device
+import androidx.health.connect.client.records.metadata.Device.Companion.TYPE_RING
+import androidx.health.connect.client.records.metadata.Metadata
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.Date
 import java.util.TimeZone
 import java.util.Locale
@@ -375,30 +379,64 @@ class MainActivity : ComponentActivity() {
             val data = session.parse()
             Log.d("RingBridge", data.toString())
 
-            sendToHealthConnect(subtype, data)
-
+            lifecycleScope.launch {
+                sendToHealthConnect(data)
+            }
 
 
         }
     }
 
-    fun sendToHealthConnect(subtype: Int, data: Any)
+    suspend fun sendToHealthConnect(data: Any)
     {
-        when(subtype){
-            HealthSession.SLEEP_HEALTH_TYPE -> sendSleepToHealthConnect(data)
-            HealthSession.ALL_HEALTH_TYPE -> sendAllToHealthConnect(data)
+        when(data){
+            is HealthSession.SleepResult -> sendSleepToHealthConnect(data)
+            is HealthSession.HealthHistoryResult -> sendAllToHealthConnect(data)
         }
     }
 
-    fun sendAllToHealthConnect(data: Any)
+    suspend fun sendAllToHealthConnect(data: HealthSession.HealthHistoryResult)
     {
+        val hrRecords = mutableListOf<HeartRateRecord>()
+
+
+
+        data.data.forEach { session->
+            val start = Instant.ofEpochMilli(session.startTime)
+            val end = Instant.ofEpochMilli(session.startTime + 30*1000)
+            val samples = mutableListOf(HeartRateRecord.Sample(start,
+                session.heartValue.toLong()))
+            val meta = Metadata.autoRecorded(Device(TYPE_RING))
+            hrRecords.add(HeartRateRecord(start, null, end, null, samples, meta ))
+        }
+
+        val ret =  healthConnectClient.insertRecords(hrRecords)
+        Log.d("RingBridge", ret.toString())
+    }
+
+    suspend fun sendSleepToHealthConnect(data: HealthSession.SleepResult)
+    {
+        val sessions = mutableListOf<SleepSessionRecord>()
+        data.data.forEach { it ->
+            val segments = mutableListOf<SleepSessionRecord.Stage>()
+            it.sleepData.forEach { iit ->
+                val start = Instant.ofEpochMilli(iit.sleepStartTime)
+                val end = Instant.ofEpochMilli(iit.sleepStartTime +(iit.sleepLen*1000))
+                val type = HealthSession.SLEEP_TYPES[iit.sleepType]!!
+                val currentSegment = SleepSessionRecord.Stage(start, end, type  )
+                segments.add(currentSegment)
+            }
+            val start = Instant.ofEpochMilli(it.startTime)
+            val end = Instant.ofEpochMilli(it.endTime)
+            val meta = Metadata.autoRecorded(Device(TYPE_RING))
+            sessions.add(SleepSessionRecord(start, null, end, null, meta, null, null, segments))
+
+        }
+
+        healthConnectClient.insertRecords(sessions)
 
     }
 
-    fun sendSleepToHealthConnect(data: Any)
-    {
-
-    }
     override fun onResume() {
         super.onResume()
         updateBlePermissionState()
@@ -658,8 +696,10 @@ private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
             const val END_COMMAND = 1408
             val END_PAYLOAD = byteArrayOf()
 
-            val SLEEP_TYPES = mutableMapOf<Int, String>(
-                241 to "Deep Sleep", 242 to "Light Sleep", 243 to "REM"
+            val SLEEP_TYPES = mutableMapOf<Int, Int>(
+                241 to SleepSessionRecord.STAGE_TYPE_DEEP,
+                242 to SleepSessionRecord.STAGE_TYPE_LIGHT,
+                243 to SleepSessionRecord.STAGE_TYPE_REM
             )
 
             const val OFFSET_2000 = 946684800L
