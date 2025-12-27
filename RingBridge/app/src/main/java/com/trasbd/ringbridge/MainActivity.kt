@@ -19,19 +19,28 @@ import androidx.annotation.RequiresPermission
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.trasbd.ringbridge.ui.theme.RingBridgeTheme
 import java.util.UUID
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.core.app.ActivityCompat
@@ -125,18 +134,18 @@ class MainActivity : ComponentActivity() {
         override fun onConnectionStateChange(
             gatt: BluetoothGatt, status: Int, newState: Int
         ) {
-            Log.d(
+            logger.log(
                 "RingBridge", "onConnectionStateChange status=$status newState=$newState"
             )
 
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.d("RingBridge", "✅ Connected, discovering services")
+                logger.log("RingBridge", "✅ Connected, discovering services")
                 isConnected = true
                 gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 isConnected = false
                 isReady = false
-                Log.d("RingBridge", "❌ Disconnected")
+                logger.log("RingBridge", "❌ Disconnected")
 
             }
         }
@@ -151,7 +160,7 @@ class MainActivity : ComponentActivity() {
                         if (ch.uuid == RING_UUIDS.UUID_BE94_WRITE) {
                             be94WriteChar = ch
                             isReady = true
-                            Log.d("RingBridge", "✅ BE94 write characteristic ready")
+                            logger.log("RingBridge", "✅ BE94 write characteristic ready")
                         }
                     }
                 }
@@ -191,7 +200,7 @@ class MainActivity : ComponentActivity() {
                 if (!cccdWriting) writeNextCccd()
 
             } else {
-                Log.e("RingBridge", "❌ CCCD not found")
+                logger.log("RingBridge", "❌ CCCD not found")
             }
         }
 
@@ -200,7 +209,7 @@ class MainActivity : ComponentActivity() {
         private fun writeNextCccd() {
             val (d, v) = cccdQueue.removeFirstOrNull() ?: run {
                 cccdWriting = false
-                Log.d("RingBridge", "✅ All CCCDs written")
+                logger.log("RingBridge", "✅ All CCCDs written")
                 return
             }
 
@@ -216,7 +225,7 @@ class MainActivity : ComponentActivity() {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 writeNextCccd()
             } else {
-                Log.e("RingBridge", "❌ CCCD write failed: $status")
+                logger.log("RingBridge", "❌ CCCD write failed: $status")
             }
         }
 
@@ -224,7 +233,7 @@ class MainActivity : ComponentActivity() {
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray
         ) {
-            Log.d(
+            logger.log(
                 "RingBridge", "NOTIFY ${characteristic.uuid}: ${
                 value.joinToString(" ") { "%02X".format(it) }
             }")
@@ -236,7 +245,7 @@ class MainActivity : ComponentActivity() {
 
                     val full = reassembleFrame(value) ?: return@withLock
                     val frame = decodeFrame(full)
-                    Log.d(
+                    logger.log(
                         "RingBridge", "Received ${frame.group} ${frame.subtype} ${
                         frame.payload.joinToString(" ") {
                             "%02X".format(it)
@@ -375,7 +384,7 @@ class MainActivity : ComponentActivity() {
         if (session.complete) {
             healthSession = null
             val data = session.parse()
-            Log.d("RingBridge", data.toString())
+            logger.log("RingBridge", data.toString())
 
             lifecycleScope.launch {
                 sendToHealthConnect(data)
@@ -414,6 +423,8 @@ class MainActivity : ComponentActivity() {
 
         healthConnectClient.insertRecords(records)
 
+        SendCmd(1348)
+
     }
 
     suspend fun sendSleepToHealthConnect(data: HealthSession.SleepResult) {
@@ -449,6 +460,8 @@ class MainActivity : ComponentActivity() {
         }
 
         healthConnectClient.insertRecords(sessions)
+
+        SendCmd(1345)
 
     }
 
@@ -573,7 +586,8 @@ class MainActivity : ComponentActivity() {
                     onRequestData = { requestHealthData() },
                     onRequestHealthConnect = { requestHealthConnectPermissions() },
                     onConnect = { startBle() },
-                    onOpenSettings = { openAppSettings() })
+                    onOpenSettings = { openAppSettings() },
+                    logger = logger)
             }
         }
 
@@ -584,18 +598,18 @@ class MainActivity : ComponentActivity() {
     // =====================
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun startBle() {
-        Log.d("RingBridge", "startBle() called")
+        logger.log("RingBridge", "startBle() called")
 
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
 
         val adapter = bluetoothManager.adapter
         if (adapter == null || !adapter.isEnabled) {
-            Log.e("RingBridge", "Bluetooth adapter not available or disabled")
+            logger.log("RingBridge", "Bluetooth adapter not available or disabled")
             return
         }
 
         val device = adapter.getRemoteDevice(RING_MAC)
-        Log.d("RingBridge", "Connecting to $RING_MAC")
+        logger.log("RingBridge", "Connecting to $RING_MAC")
 
         bluetoothGatt = device.connectGatt(
             this, false,              // do NOT autoConnect
@@ -606,7 +620,7 @@ class MainActivity : ComponentActivity() {
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun requestHealthData() {
         if (!isReady) {
-            Log.e("RingBridge", "❌ Not ready yet")
+            logger.log("RingBridge", "❌ Not ready yet")
             return
         }
 
@@ -640,7 +654,7 @@ class MainActivity : ComponentActivity() {
             be94WriteChar, frame, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         )
         cmdAck = false
-        Log.d("RingBridge", "Sent ${pending.cmd} " + frame.joinToString(" ") { "%02X".format(it) })
+        logger.log("RingBridge", "Sent ${pending.cmd} " + frame.joinToString(" ") { "%02X".format(it) })
 
     }
 
@@ -1010,6 +1024,22 @@ class MainActivity : ComponentActivity() {
 
     }
 
+    val logger = UiLogger()
+
+
+    class UiLogger {
+        private val _lines = mutableStateListOf<LogLine>()
+        val lines: List<LogLine> = _lines
+
+        fun log(level: String, msg: String) {
+            val ts = java.time.LocalTime.now().toString()
+            _lines.add(LogLine(ts, level, msg))
+        }
+
+        fun clear() = _lines.clear()
+    }
+
+
 
 }
 
@@ -1023,7 +1053,8 @@ fun MainScreen(
     onRequestHealthConnect: () -> Unit,
     onConnect: () -> Unit,
     onRequestData: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    logger: MainActivity.UiLogger
 ) {
     Scaffold { padding ->
         Column(
@@ -1126,6 +1157,14 @@ fun MainScreen(
                     }
                 }
             }
+
+            Card{
+                LogConsole(
+                    logs = logger.lines,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+            }
         }
     }
 }
@@ -1138,5 +1177,48 @@ private fun StatusRow(text: String, icon: String) {
     ) {
         Text(icon)
         Text(text)
+    }
+}
+
+data class LogLine(
+    val time: String,
+    val level: String,
+    val message: String
+)
+
+
+@Composable
+fun LogConsole(
+    logs: List<LogLine>,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(logs.size) {
+        if (logs.isNotEmpty()) {
+            listState.animateScrollToItem(logs.lastIndex)
+        }
+    }
+
+    Card(modifier = modifier) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Text("Console", style = MaterialTheme.typography.titleMedium)
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .height(200.dp)
+                    .fillMaxWidth()
+            ) {
+                items(logs) { line ->
+                    Text(
+                        text = "[${line.time}] ${line.level}: ${line.message}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
     }
 }
