@@ -1,6 +1,7 @@
 package com.trasbd.ringbridge
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.os.Build
 import android.os.Bundle
@@ -30,25 +31,38 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.TimeZone
+import java.util.Locale
 
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class MainActivity : ComponentActivity() {
 
-    private val UUID_BE94_SERVICE = UUID.fromString("be940000-7333-be46-b7ae-689e71722bd5")
+    @Suppress("ClassName", "unused")
+    private object RING_UUIDS {
+        val UUID_BE94_SERVICE: UUID = UUID.fromString("be940000-7333-be46-b7ae-689e71722bd5")
 
-    private val UUID_BE94_WRITE = UUID.fromString("be940001-7333-be46-b7ae-689e71722bd5")
-    private val UUID_BE94_WRITE2 = UUID.fromString("be940002-7333-be46-b7ae-689e71722bd5")
-    private val UUID_IND_BE94_SECOND = UUID.fromString("be940003-7333-be46-b7ae-689e71722bd5")
+        val UUID_BE94_WRITE: UUID = UUID.fromString("be940001-7333-be46-b7ae-689e71722bd5")
+        val UUID_BE94_WRITE2: UUID = UUID.fromString("be940002-7333-be46-b7ae-689e71722bd5")
+        val UUID_IND_BE94_SECOND: UUID = UUID.fromString("be940003-7333-be46-b7ae-689e71722bd5")
 
-    private val UUID_NOTIFY_AE02 = UUID.fromString("0000ae02-0000-1000-8000-00805f9b34fb")
-    private val UUID_IND_FEA1 = UUID.fromString("0000fea1-0000-1000-8000-00805f9b34fb")
-    private val UUID_IND_FEA2 = UUID.fromString("0000fea2-0000-1000-8000-00805f9b34fb")
+        val UUID_NOTIFY_AE02: UUID = UUID.fromString("0000ae02-0000-1000-8000-00805f9b34fb")
+        val UUID_IND_FEA1: UUID = UUID.fromString("0000fea1-0000-1000-8000-00805f9b34fb")
+        val UUID_IND_FEA2: UUID = UUID.fromString("0000fea2-0000-1000-8000-00805f9b34fb")
 
-    private val UUID_NOTIFY_NUS_TX = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e")
+        val UUID_NOTIFY_NUS_TX: UUID = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e")
 
-    private val NOTIFY_ALLOWLIST = setOf(
-        UUID_BE94_WRITE, UUID_IND_BE94_SECOND, UUID_NOTIFY_AE02, UUID_IND_FEA2, UUID_NOTIFY_NUS_TX
-    )
+        val NOTIFY_ALLOWLIST = setOf(
+            UUID_BE94_WRITE,
+            UUID_IND_BE94_SECOND,
+            UUID_NOTIFY_AE02,
+            UUID_IND_FEA2,
+            UUID_NOTIFY_NUS_TX
+        )
+    }
 
+    @Suppress("PrivatePropertyName")
     private val RING_MAC = "07:35:00:01:8A:EC"
 
     private lateinit var be94WriteChar: BluetoothGattCharacteristic
@@ -56,15 +70,18 @@ class MainActivity : ComponentActivity() {
     private var isConnected by mutableStateOf(false)
     private var isReady by mutableStateOf(false)
 
+    private var healthSession: HealthSession? = null
+
 
     // =====================
     // BLE permissions
     // =====================
-    @RequiresApi(Build.VERSION_CODES.S)
     private val blePermissions = arrayOf(
         Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN
     )
 
+    @SuppressLint("MissingPermission")
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
@@ -105,13 +122,14 @@ class MainActivity : ComponentActivity() {
         }
 
 
+
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
 
             for (service in gatt.services) {
-                if (service.uuid == UUID_BE94_SERVICE) {
+                if (service.uuid == RING_UUIDS.UUID_BE94_SERVICE) {
                     for (ch in service.characteristics) {
-                        if (ch.uuid == UUID_BE94_WRITE) {
+                        if (ch.uuid == RING_UUIDS.UUID_BE94_WRITE) {
                             be94WriteChar = ch
                             isReady = true
                             Log.d("RingBridge", "✅ BE94 write characteristic ready")
@@ -120,7 +138,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 for (ch in service.characteristics) {
-                    if (ch.uuid !in NOTIFY_ALLOWLIST) continue
+                    if (ch.uuid !in RING_UUIDS.NOTIFY_ALLOWLIST) continue
 
                     val props = ch.properties
                     val canNotify = props and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
@@ -184,8 +202,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-
-        @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray
         ) {
@@ -268,6 +285,7 @@ class MainActivity : ComponentActivity() {
         return full
     }
 
+    @Suppress("ArrayInDataClass")
     private data class DecodedFrame(
         val group: Int, val subtype: Int, val payload: ByteArray
     )
@@ -332,27 +350,77 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleGroup5(subtype: Int, payload: ByteArray) {
+        val session = healthSession ?: HealthSession().also {
+            healthSession = it
+        }
 
+        session.ingest(subtype, payload)
+
+        if (session.complete) {
+            healthSession = null
+            val data = session.parse()
+            Log.d("RingBridge", data.toString())
+
+            sendToHealthConnect(subtype, data)
+
+
+
+        }
+    }
+
+    fun sendToHealthConnect(subtype: Int, data: Any)
+    {
+        when(subtype){
+            HealthSession.SLEEP_HEALTH_TYPE -> sendSleepToHealthConnect(data)
+            HealthSession.ALL_HEALTH_TYPE -> sendAllToHealthConnect(data)
+        }
+    }
+
+    fun sendAllToHealthConnect(data: Any)
+    {
+
+    }
+
+    fun sendSleepToHealthConnect(data: Any)
+    {
+
+    }
+
+
+    @SuppressLint("ObsoleteSdkInt")
+    private fun requestBluetoothPermissions()
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            permissionLauncher.launch(blePermissions)
+    }
+
+    private fun requestHealthConnectPermissions() {
+        TODO("Not yet implemented")
     }
 
 
     // =====================
     // Activity lifecycle
     // =====================
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissionLauncher.launch(blePermissions)
-        }
+
+            requestBluetoothPermissions()
+
 
         enableEdgeToEdge()
         setContent {
             RingBridgeTheme {
                 MainScreen(
-                    isConnected = isConnected, isReady = isReady, onRequestData = {
-                        requestHealthData()
-                    })
+                    isConnected = isConnected,
+                    isReady = isReady,
+                    onRequestData = { requestHealthData() },
+                    onRequestBluetooth = { requestBluetoothPermissions()},
+                    onRequestHealthConnect = {requestHealthConnectPermissions()},
+                    onConnect = { startBle() })
             }
         }
 
@@ -395,12 +463,14 @@ class MainActivity : ComponentActivity() {
         SendCmd(1289)
     }
 
+    @Suppress("ArrayInDataClass")
     private data class PendingCommand(
         val cmd: Int, val group: Int, val subtype: Int, val payload: ByteArray = byteArrayOf()
     )
 
     private val sendQueue = ArrayDeque<PendingCommand>()
 
+    @Suppress("FunctionName")
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     fun SendCmd(cmd: Int, payload: ByteArray = byteArrayOf()) {
@@ -411,6 +481,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Suppress("FunctionName")
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun SendPending(pending: PendingCommand) {
@@ -482,8 +553,9 @@ class MainActivity : ComponentActivity() {
 
     class HealthSession() {
         companion object {
-            const val SLEEP_HEALTH_HEADER = 4
-            val HEALTH_TYPES = intArrayOf(SLEEP_HEALTH_HEADER, 8, 9)
+            const val SLEEP_HEALTH_TYPE = 4
+            const val ALL_HEALTH_TYPE = 9
+            val HEALTH_TYPES = intArrayOf(SLEEP_HEALTH_TYPE, 8, ALL_HEALTH_TYPE)
             const val END_SUBTYPE = 128
             const val END_COMMAND = 1408
             val END_PAYLOAD = byteArrayOf()
@@ -491,6 +563,8 @@ class MainActivity : ComponentActivity() {
             val SLEEP_TYPES = mutableMapOf<Int, String>(
                 241 to "Deep Sleep", 242 to "Light Sleep", 243 to "REM"
             )
+
+            const val OFFSET_2000 = 946684800L
         }
 
         var healthType: Int? = null
@@ -500,7 +574,7 @@ class MainActivity : ComponentActivity() {
         fun ingest(subtype: Int, payload: ByteArray) {
             if (HEALTH_TYPES.contains(subtype)) {
                 healthType = subtype
-                blocks = mutableListOf<ByteArray>()
+                blocks = mutableListOf()
                 complete = false
                 return
             }
@@ -534,8 +608,8 @@ class MainActivity : ComponentActivity() {
 
         fun unpackHealthData(raw: ByteArray, healthType: Int): Any {
             return when (healthType) {
-                4 -> unpackSleepData(raw, healthType)
-                9 -> unpackHealthHistoryAll(raw, healthType)
+                SLEEP_HEALTH_TYPE -> unpackSleepData(raw, healthType)
+                ALL_HEALTH_TYPE -> unpackHealthHistoryAll(raw, healthType)
                 else -> throw NotImplementedError(
                     "Health type $healthType not implemented yet"
                 )
@@ -543,12 +617,12 @@ class MainActivity : ComponentActivity() {
         }
 
 
+        @Suppress("unused", "UnusedVariable")
         fun unpackHealthHistoryAll(
             raw: ByteArray,
             healthType: Int
         ): HealthHistoryResult {
 
-            val OFFSET_2000 = 946684800L
 
             // Match Python: time.localtime().tm_gmtoff
             val tzOffsetMs = TimeZone.getDefault().rawOffset.toLong()
@@ -619,16 +693,14 @@ class MainActivity : ComponentActivity() {
 
         fun unpackSleepData(raw: ByteArray, healthType: Int): SleepResult {
 
-            val OFFSET_2000 = 946684800L
             val tzOffsetMs = TimeZone.getDefault().rawOffset.toLong()
 
             val sessions = mutableListOf<SleepSession>()
 
             val dateFormat = SimpleDateFormat("yyyyMMdd HHmmss", Locale.US)
 
-            val b = raw
             var i = 0
-            val length = b.size
+            val length = raw.size
 
             while (i + 20 <= length) {
 
@@ -636,20 +708,20 @@ class MainActivity : ComponentActivity() {
 
                 // ---- session header ----
                 val sessionLen =
-                    (b[i + 2].toInt() and 0xFF) or
-                            ((b[i + 3].toInt() and 0xFF) shl 8)
+                    (raw[i + 2].toInt() and 0xFF) or
+                            ((raw[i + 3].toInt() and 0xFF) shl 8)
 
                 val startSec =
-                    (b[i + 4].toInt() and 0xFF) or
-                            ((b[i + 5].toInt() and 0xFF) shl 8) or
-                            ((b[i + 6].toInt() and 0xFF) shl 16) or
-                            ((b[i + 7].toInt() and 0xFF) shl 24)
+                    (raw[i + 4].toInt() and 0xFF) or
+                            ((raw[i + 5].toInt() and 0xFF) shl 8) or
+                            ((raw[i + 6].toInt() and 0xFF) shl 16) or
+                            ((raw[i + 7].toInt() and 0xFF) shl 24)
 
                 val endSec =
-                    (b[i + 8].toInt() and 0xFF) or
-                            ((b[i + 9].toInt() and 0xFF) shl 8) or
-                            ((b[i + 10].toInt() and 0xFF) shl 16) or
-                            ((b[i + 11].toInt() and 0xFF) shl 24)
+                    (raw[i + 8].toInt() and 0xFF) or
+                            ((raw[i + 9].toInt() and 0xFF) shl 8) or
+                            ((raw[i + 10].toInt() and 0xFF) shl 16) or
+                            ((raw[i + 11].toInt() and 0xFF) shl 24)
 
                 val startTime =
                     ((startSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
@@ -661,8 +733,8 @@ class MainActivity : ComponentActivity() {
                 val endDateTime = dateFormat.format(Date(endTime))
 
                 val deepSleepCount =
-                    (b[i + 12].toInt() and 0xFF) or
-                            ((b[i + 13].toInt() and 0xFF) shl 8)
+                    (raw[i + 12].toInt() and 0xFF) or
+                            ((raw[i + 13].toInt() and 0xFF) shl 8)
 
                 // ---- dual interpretation block (EXACT Java behavior) ----
                 val remTotal: Int
@@ -672,32 +744,32 @@ class MainActivity : ComponentActivity() {
 
                 if (deepSleepCount == 0xFFFF) {
                     remTotal =
-                        (b[i + 14].toInt() and 0xFF) or
-                                ((b[i + 15].toInt() and 0xFF) shl 8)
+                        (raw[i + 14].toInt() and 0xFF) or
+                                ((raw[i + 15].toInt() and 0xFF) shl 8)
 
                     deepTotal =
-                        (b[i + 16].toInt() and 0xFF) or
-                                ((b[i + 17].toInt() and 0xFF) shl 8)
+                        (raw[i + 16].toInt() and 0xFF) or
+                                ((raw[i + 17].toInt() and 0xFF) shl 8)
 
                     lightTotal =
-                        (b[i + 18].toInt() and 0xFF) or
-                                ((b[i + 19].toInt() and 0xFF) shl 8)
+                        (raw[i + 18].toInt() and 0xFF) or
+                                ((raw[i + 19].toInt() and 0xFF) shl 8)
 
                     lightCount = 0
                 } else {
                     lightCount =
-                        (b[i + 14].toInt() and 0xFF) or
-                                ((b[i + 15].toInt() and 0xFF) shl 8)
+                        (raw[i + 14].toInt() and 0xFF) or
+                                ((raw[i + 15].toInt() and 0xFF) shl 8)
 
                     remTotal = 0
 
                     deepTotal =
-                        ((b[i + 16].toInt() and 0xFF) or
-                                ((b[i + 17].toInt() and 0xFF) shl 8)) * 60
+                        ((raw[i + 16].toInt() and 0xFF) or
+                                ((raw[i + 17].toInt() and 0xFF) shl 8)) * 60
 
                     lightTotal =
-                        ((b[i + 18].toInt() and 0xFF) or
-                                ((b[i + 19].toInt() and 0xFF) shl 8)) * 60
+                        ((raw[i + 18].toInt() and 0xFF) or
+                                ((raw[i + 19].toInt() and 0xFF) shl 8)) * 60
                 }
 
                 // ---- parse sleep segments ----
@@ -711,21 +783,21 @@ class MainActivity : ComponentActivity() {
 
                 while (segPtr + 8 <= sessionEnd) {
 
-                    val sleepType = b[segPtr].toInt() and 0xFF
+                    val sleepType = raw[segPtr].toInt() and 0xFF
 
                     val segSec =
-                        (b[segPtr + 1].toInt() and 0xFF) or
-                                ((b[segPtr + 2].toInt() and 0xFF) shl 8) or
-                                ((b[segPtr + 3].toInt() and 0xFF) shl 16) or
-                                ((b[segPtr + 4].toInt() and 0xFF) shl 24)
+                        (raw[segPtr + 1].toInt() and 0xFF) or
+                                ((raw[segPtr + 2].toInt() and 0xFF) shl 8) or
+                                ((raw[segPtr + 3].toInt() and 0xFF) shl 16) or
+                                ((raw[segPtr + 4].toInt() and 0xFF) shl 24)
 
                     val segTime =
                         ((segSec.toLong() + OFFSET_2000) * 1000L) - tzOffsetMs
 
                     val dur =
-                        (b[segPtr + 5].toInt() and 0xFF) or
-                                ((b[segPtr + 6].toInt() and 0xFF) shl 8) or
-                                ((b[segPtr + 7].toInt() and 0xFF) shl 16)
+                        (raw[segPtr + 5].toInt() and 0xFF) or
+                                ((raw[segPtr + 6].toInt() and 0xFF) shl 8) or
+                                ((raw[segPtr + 7].toInt() and 0xFF) shl 16)
 
                     if (sleepType == 244) { // wake
                         wakeCount++
@@ -827,16 +899,38 @@ class MainActivity : ComponentActivity() {
 
 }
 
+
+
 @Composable
 fun MainScreen(
-    isConnected: Boolean, isReady: Boolean, onRequestData: () -> Unit
+    isConnected: Boolean,
+    isReady: Boolean,
+    onRequestData: () -> Unit,
+    onRequestBluetooth: () -> Unit,
+    onRequestHealthConnect: ()-> Unit,
+    onConnect: () -> Unit
 ) {
     Scaffold { padding ->
         Column(
             modifier = Modifier.padding(padding), verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Button(
+                onClick = onRequestBluetooth
+            ) {
+                Text("Bluetooth Permissions")
+            }
+            Button(
+                onClick = onRequestHealthConnect
+            ) {
+                Text("HealthConnect Permissions")
+            }
             Text(text = if (isConnected) "Connected" else "Not connected")
 
+            Button(
+                onClick = onConnect, enabled = !isReady
+            ) {
+                Text("Connect to Ring")
+            }
             Button(
                 onClick = onRequestData, enabled = isReady
             ) {

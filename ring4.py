@@ -621,7 +621,7 @@ async def main():
 
     # await ring.send_cmd(550)
 
-    await ring.send_cmd(1284)
+    #await ring.send_cmd(1284)
     await ring.send_cmd(1289)
 
     print("📡 Requests sent, watching for notifications...")
