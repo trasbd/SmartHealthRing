@@ -3,8 +3,12 @@ package com.trasbd.ringbridge
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.*
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,8 +18,11 @@ import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +33,13 @@ import java.util.UUID
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.core.app.ActivityCompat
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.*
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,7 +50,7 @@ import java.util.Date
 import java.util.TimeZone
 import java.util.Locale
 
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 class MainActivity : ComponentActivity() {
 
     @Suppress("ClassName", "unused")
@@ -85,10 +99,11 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        val allGranted = results.values.all { it }
-        if (allGranted) {
+        updateBlePermissionState()
+        if (blePermissionState == BlePermissionState.GRANTED) {
             startBle()
         }
+
     }
 
 
@@ -151,7 +166,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         private fun enableNotifications(
             gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic
@@ -176,7 +191,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         private fun writeNextCccd() {
             val (d, v) = cccdQueue.removeFirstOrNull() ?: run {
@@ -191,7 +206,6 @@ class MainActivity : ComponentActivity() {
 
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        @RequiresApi(Build.VERSION_CODES.TIRAMISU)
         override fun onDescriptorWrite(
             gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int
         ) {
@@ -304,7 +318,7 @@ class MainActivity : ComponentActivity() {
 
     private var cmdAck: Boolean = false
 
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleFrame(group: Int, subtype: Int, payload: ByteArray) {
         var popped = false
@@ -385,31 +399,117 @@ class MainActivity : ComponentActivity() {
     {
 
     }
+    override fun onResume() {
+        super.onResume()
+        updateBlePermissionState()
+    }
 
+    enum class BlePermissionState {
+        GRANTED,
+        DENIED,
+        PERMANENTLY_DENIED
+    }
 
-    @SuppressLint("ObsoleteSdkInt")
-    private fun requestBluetoothPermissions()
-    {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-            permissionLauncher.launch(blePermissions)
+    private fun updateBlePermissionState() {
+
+        val connectGranted =
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                    PackageManager.PERMISSION_GRANTED
+
+        val scanGranted =
+            checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) ==
+                    PackageManager.PERMISSION_GRANTED
+
+        blePermissionState = when {
+            connectGranted && scanGranted ->
+                BlePermissionState.GRANTED
+
+            ActivityCompat.shouldShowRequestPermissionRationale(
+                this,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) ->
+                BlePermissionState.DENIED
+
+            else ->
+                BlePermissionState.PERMANENTLY_DENIED
+        }
+    }
+
+    private val PERMISSIONS = setOf(
+        // Steps
+        HealthPermission.getReadPermission(StepsRecord::class),
+        HealthPermission.getWritePermission(StepsRecord::class),
+
+        // Heart rate
+        HealthPermission.getReadPermission(HeartRateRecord::class),
+        HealthPermission.getWritePermission(HeartRateRecord::class),
+
+        // Sleep
+        HealthPermission.getReadPermission(SleepSessionRecord::class),
+        HealthPermission.getWritePermission(SleepSessionRecord::class),
+
+        // Blood oxygen / SpO₂
+        HealthPermission.getReadPermission(OxygenSaturationRecord::class),
+        HealthPermission.getWritePermission(OxygenSaturationRecord::class),
+    )
+
+    // Create the permissions launcher
+    val requestPermissionActivityContract = PermissionController.createRequestPermissionResultContract()
+
+    val requestPermissions = registerForActivityResult(requestPermissionActivityContract) { granted ->
+        if (granted.containsAll(PERMISSIONS)) {
+            // Permissions successfully granted
+        } else {
+            // Lack of required permissions
+        }
+    }
+
+    suspend fun checkPermissionsAndRun(healthConnectClient: HealthConnectClient) {
+        val granted = healthConnectClient.permissionController.getGrantedPermissions()
+        if (granted.containsAll(PERMISSIONS)) {
+            // Permissions already granted; proceed with inserting or reading data
+        } else {
+            requestPermissions.launch(PERMISSIONS)
+        }
     }
 
     private fun requestHealthConnectPermissions() {
-        TODO("Not yet implemented")
+
+        lifecycleScope.launch {
+            checkPermissionsAndRun(healthConnectClient)
+        }
+    }
+
+
+private lateinit var healthConnectClient: HealthConnectClient
+
+
+
+
+private var blePermissionState by mutableStateOf(BlePermissionState.DENIED)
+
+    private fun openAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null)
+        )
+        startActivity(intent)
     }
 
 
     // =====================
     // Activity lifecycle
     // =====================
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
 
-            requestBluetoothPermissions()
+        permissionLauncher.launch(blePermissions)
 
+        updateBlePermissionState()
+
+        healthConnectClient = HealthConnectClient.getOrCreate(this)
 
         enableEdgeToEdge()
         setContent {
@@ -417,10 +517,11 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     isConnected = isConnected,
                     isReady = isReady,
+                    blePermissionState = blePermissionState,
                     onRequestData = { requestHealthData() },
-                    onRequestBluetooth = { requestBluetoothPermissions()},
                     onRequestHealthConnect = {requestHealthConnectPermissions()},
-                    onConnect = { startBle() })
+                    onConnect = { startBle() },
+                    onOpenSettings = { openAppSettings() })
             }
         }
 
@@ -450,7 +551,6 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun requestHealthData() {
         if (!isReady) {
@@ -472,7 +572,6 @@ class MainActivity : ComponentActivity() {
 
     @Suppress("FunctionName")
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     fun SendCmd(cmd: Int, payload: ByteArray = byteArrayOf()) {
         val pending = PendingCommand(cmd, cmd shr 8 and 0xFF, cmd and 0xFF, payload)
         sendQueue.add(pending)
@@ -483,7 +582,6 @@ class MainActivity : ComponentActivity() {
 
     @Suppress("FunctionName")
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun SendPending(pending: PendingCommand) {
         val frame = buildBe94Frame(pending.cmd, pending.payload)
         bluetoothGatt.writeCharacteristic(
@@ -900,42 +998,134 @@ class MainActivity : ComponentActivity() {
 }
 
 
-
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @Composable
 fun MainScreen(
+    blePermissionState: MainActivity.BlePermissionState,
     isConnected: Boolean,
     isReady: Boolean,
+    onRequestHealthConnect: () -> Unit,
+    onConnect: () -> Unit,
     onRequestData: () -> Unit,
-    onRequestBluetooth: () -> Unit,
-    onRequestHealthConnect: ()-> Unit,
-    onConnect: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     Scaffold { padding ->
         Column(
-            modifier = Modifier.padding(padding), verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Button(
-                onClick = onRequestBluetooth
-            ) {
-                Text("Bluetooth Permissions")
-            }
-            Button(
-                onClick = onRequestHealthConnect
-            ) {
-                Text("HealthConnect Permissions")
-            }
-            Text(text = if (isConnected) "Connected" else "Not connected")
 
-            Button(
-                onClick = onConnect, enabled = !isReady
-            ) {
-                Text("Connect to Ring")
+            Text(
+                text = "Ring Bridge",
+                style = MaterialTheme.typography.headlineMedium
+            )
+
+            /* ---------------- Bluetooth Permission ---------------- */
+
+            Card {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Bluetooth Permission",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    when (blePermissionState) {
+                        MainActivity.BlePermissionState.GRANTED -> {
+                            StatusRow("Bluetooth access granted", "✅")
+                        }
+
+                        MainActivity.BlePermissionState.DENIED -> {
+                            StatusRow("Bluetooth permission required", "⚠️")
+                            Text(
+                                text = "Please allow Bluetooth access when prompted.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        MainActivity.BlePermissionState.PERMANENTLY_DENIED -> {
+                            StatusRow("Bluetooth permission denied", "❌")
+                            Text(
+                                text = "Enable Bluetooth permission in system settings.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+
+                            Button(
+                                onClick = onOpenSettings,
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) {
+                                Text("Open App Settings")
+                            }
+                        }
+                    }
+                }
             }
-            Button(
-                onClick = onRequestData, enabled = isReady
-            ) {
-                Text("Get Ring Data")
+
+            /* ---------------- Health Connect ---------------- */
+
+            Card {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Health Connect",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Button(onClick = onRequestHealthConnect) {
+                        Text("Grant Health Connect Permissions")
+                    }
+                }
+            }
+
+            /* ---------------- Ring Connection ---------------- */
+
+            Card {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Ring Status",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    StatusRow(
+                        text = if (isConnected) "Ring connected" else "Not connected",
+                        icon = if (isConnected) "🟢" else "🔴"
+                    )
+
+                    Button(
+                        onClick = onConnect,
+                        enabled = blePermissionState == MainActivity.BlePermissionState.GRANTED && !isConnected
+                    ) {
+                        Text("Connect to Ring")
+                    }
+
+                    Button(
+                        onClick = onRequestData,
+                        enabled = isReady && blePermissionState == MainActivity.BlePermissionState.GRANTED
+                    ) {
+                        Text("Get Ring Data")
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun StatusRow(text: String, icon: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(icon)
+        Text(text)
     }
 }
