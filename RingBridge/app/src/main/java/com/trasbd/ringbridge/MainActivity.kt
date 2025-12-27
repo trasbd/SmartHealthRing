@@ -42,6 +42,7 @@ import androidx.health.connect.client.records.*
 import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Device.Companion.TYPE_RING
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.units.Percentage
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -392,9 +393,7 @@ class MainActivity : ComponentActivity() {
     }
 
     suspend fun sendAllToHealthConnect(data: HealthSession.HealthHistoryResult) {
-        val hrRecords = mutableListOf<HeartRateRecord>()
-
-
+        val records = mutableListOf<Record>()
 
         data.data.forEach { session ->
             val start = Instant.ofEpochMilli(session.startTime)
@@ -404,12 +403,17 @@ class MainActivity : ComponentActivity() {
                     start, session.heartValue.toLong()
                 )
             )
+
             val meta = Metadata.autoRecorded(Device(TYPE_RING))
-            hrRecords.add(HeartRateRecord(start, null, end, null, samples, meta))
+
+            records.add(OxygenSaturationRecord(start, null, Percentage(session.ooValue.toDouble()),meta ))
+            records.add(HeartRateRecord(start, null, end, null, samples, meta))
+            records.add(HeartRateVariabilityRmssdRecord(start, null, session.hrvValue.toDouble(), meta))
+            records.add(RespiratoryRateRecord(start, null, session.respiratoryRateValue.toDouble(), meta))
         }
 
-        val ret = healthConnectClient.insertRecords(hrRecords)
-        Log.d("RingBridge", ret.toString())
+        healthConnectClient.insertRecords(records)
+
     }
 
     suspend fun sendSleepToHealthConnect(data: HealthSession.SleepResult) {
@@ -492,6 +496,13 @@ class MainActivity : ComponentActivity() {
         // Blood oxygen / SpO₂
         HealthPermission.getReadPermission(OxygenSaturationRecord::class),
         HealthPermission.getWritePermission(OxygenSaturationRecord::class),
+
+        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+        HealthPermission.getWritePermission(HeartRateVariabilityRmssdRecord::class),
+
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+        HealthPermission.getWritePermission(RespiratoryRateRecord::class),
+
     )
 
     // Create the permissions launcher
