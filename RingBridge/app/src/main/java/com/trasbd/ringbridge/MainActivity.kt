@@ -315,6 +315,7 @@ class MainActivity : ComponentActivity() {
         val group = data[0].toInt() and 0xFF
         val subtype = data[1].toInt() and 0xFF
 
+
         val totalLen = (data[2].toInt() and 0xFF) or ((data[3].toInt() and 0xFF) shl 8)
 
         val payloadLen = totalLen - 6
@@ -329,9 +330,10 @@ class MainActivity : ComponentActivity() {
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleFrame(group: Int, subtype: Int, payload: ByteArray) {
         var popped = false
+        val cmd = (group shl 8) or subtype
         if (sendQueue.count() > 0) {
             val head = sendQueue[0]
-            if (head.group == group && head.subtype == subtype) {
+            if ((head.group == group && head.subtype == subtype) || (cmd in 1301..<1400 && head.cmd in 1301..<1400)) {
                 sendQueue.removeFirst()
                 cmdAck = true
             }
@@ -352,6 +354,8 @@ class MainActivity : ComponentActivity() {
                 if (subtype == HealthSession.END_SUBTYPE && cmdAck) {
                     popped = true
                 }
+                if (cmd in 1301..<1400)
+                    popped = true
             }
         }
 
@@ -405,24 +409,52 @@ class MainActivity : ComponentActivity() {
 
         data.data.forEach { session ->
             val start = Instant.ofEpochMilli(session.startTime)
-            val end = Instant.ofEpochMilli(session.startTime + 30 * 1000)
-            val samples = mutableListOf(
-                HeartRateRecord.Sample(
-                    start, session.heartValue.toLong()
+            val end = Instant.ofEpochMilli(session.startTime + 1)
+
+            if (end < Instant.now()) {
+
+                val samples = mutableListOf(
+                    HeartRateRecord.Sample(
+                        start, session.heartValue.toLong()
+                    )
                 )
-            )
 
-            val meta = Metadata.autoRecorded(Device(TYPE_RING))
+                val meta = Metadata.autoRecorded(Device(TYPE_RING))
 
-            records.add(OxygenSaturationRecord(start, null, Percentage(session.ooValue.toDouble()),meta ))
-            records.add(HeartRateRecord(start, null, end, null, samples, meta))
-            records.add(HeartRateVariabilityRmssdRecord(start, null, session.hrvValue.toDouble(), meta))
-            records.add(RespiratoryRateRecord(start, null, session.respiratoryRateValue.toDouble(), meta))
+                records.add(
+                    OxygenSaturationRecord(
+                        start,
+                        null,
+                        Percentage(session.ooValue.toDouble()),
+                        meta
+                    )
+                )
+                records.add(HeartRateRecord(start, null, end, null, samples, meta))
+                records.add(
+                    HeartRateVariabilityRmssdRecord(
+                        start,
+                        null,
+                        session.hrvValue.toDouble(),
+                        meta
+                    )
+                )
+                records.add(
+                    RespiratoryRateRecord(
+                        start,
+                        null,
+                        session.respiratoryRateValue.toDouble(),
+                        meta
+                    )
+                )
+            }
+
+            healthConnectClient.insertRecords(records)
+            logger.log("RingBridge", "Posted ${records.count()} records")
+
+            HealthSession.DELETE_HEALTH_CMD.forEach {
+                SendCmd(it, HealthSession.DELETE_PAYLOAD)
+            }
         }
-
-        healthConnectClient.insertRecords(records)
-
-        SendCmd(1348)
 
     }
 
@@ -461,7 +493,7 @@ class MainActivity : ComponentActivity() {
 
         healthConnectClient.insertRecords(sessions)
 
-        SendCmd(1345)
+        SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
 
     }
 
@@ -732,6 +764,10 @@ class MainActivity : ComponentActivity() {
             const val END_SUBTYPE = 128
             const val END_COMMAND = 1408
             val END_PAYLOAD = byteArrayOf()
+
+            val DELETE_PAYLOAD = byteArrayOf(0x02)
+            val DELETE_HEALTH_CMD = listOf(1344, 1346, 1347, 1348)
+            const val DELETE_SLEEP_CMD = 1345
 
             val SLEEP_TYPES = mutableMapOf<Int, Int>(
                 241 to SleepSessionRecord.STAGE_TYPE_DEEP,
