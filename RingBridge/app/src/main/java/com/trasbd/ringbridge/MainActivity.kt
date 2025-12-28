@@ -6,7 +6,6 @@ import android.bluetooth.*
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -14,7 +13,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -27,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -64,7 +61,6 @@ import java.util.Date
 import java.util.TimeZone
 import java.util.Locale
 
-@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 class MainActivity : ComponentActivity() {
 
     @Suppress("ClassName", "unused")
@@ -374,6 +370,7 @@ class MainActivity : ComponentActivity() {
 
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleGroup5(subtype: Int, payload: ByteArray) {
         val session = healthSession ?: HealthSession().also {
             healthSession = it
@@ -386,7 +383,7 @@ class MainActivity : ComponentActivity() {
             val data = session.parse()
             logger.log("RingBridge", data.toString())
 
-            lifecycleScope.launch {
+            lifecycleScope.launch  {
                 sendToHealthConnect(data)
             }
 
@@ -394,6 +391,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     suspend fun sendToHealthConnect(data: Any) {
         when (data) {
             is HealthSession.SleepResult -> sendSleepToHealthConnect(data)
@@ -401,6 +399,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     suspend fun sendAllToHealthConnect(data: HealthSession.HealthHistoryResult) {
         val records = mutableListOf<Record>()
 
@@ -427,6 +426,7 @@ class MainActivity : ComponentActivity() {
 
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     suspend fun sendSleepToHealthConnect(data: HealthSession.SleepResult) {
         val sessions = mutableListOf<SleepSessionRecord>()
         data.data.forEach { it ->
@@ -493,6 +493,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Suppress("PrivatePropertyName")
     private val PERMISSIONS = setOf(
         // Steps
         HealthPermission.getReadPermission(StepsRecord::class),
@@ -583,7 +584,8 @@ class MainActivity : ComponentActivity() {
                     isConnected = isConnected,
                     isReady = isReady,
                     blePermissionState = blePermissionState,
-                    onRequestData = { requestHealthData() },
+                    onRequestHealth = { requestHealthData() },
+                    onRequestSleep = { requestSleepData() },
                     onRequestHealthConnect = { requestHealthConnectPermissions() },
                     onConnect = { startBle() },
                     onOpenSettings = { openAppSettings() },
@@ -623,11 +625,19 @@ class MainActivity : ComponentActivity() {
             logger.log("RingBridge", "❌ Not ready yet")
             return
         }
-
-
-        SendCmd(0x0504) // 1284 sleep
         SendCmd(1289)
     }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun requestSleepData()
+    {
+        if (!isReady) {
+            logger.log("RingBridge", "❌ Not ready yet")
+            return
+        }
+        SendCmd(0x504)
+    }
+
 
     @Suppress("ArrayInDataClass")
     private data class PendingCommand(
@@ -699,6 +709,7 @@ class MainActivity : ComponentActivity() {
         return s
     }
 
+    @Suppress("unused")
     fun chunkForMtu(data: ByteArray, mtu: Int): List<ByteArray> {
         val usable = mtu - 3
         val chunks = mutableListOf<ByteArray>()
@@ -791,6 +802,7 @@ class MainActivity : ComponentActivity() {
 
             val records = mutableListOf<HealthHistoryRecord>()
 
+            @Suppress("PrivatePropertyName")
             val RECORD_LEN = 20
             var i = 0
 
@@ -1032,6 +1044,7 @@ class MainActivity : ComponentActivity() {
         val lines: List<LogLine> = _lines
 
         fun log(level: String, msg: String) {
+            Log.d("UiLogger", "$level: $msg")
             val ts = java.time.LocalTime.now().toString()
             _lines.add(LogLine(ts, level, msg))
         }
@@ -1043,8 +1056,6 @@ class MainActivity : ComponentActivity() {
 
 }
 
-
-@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 @Composable
 fun MainScreen(
     blePermissionState: MainActivity.BlePermissionState,
@@ -1052,7 +1063,8 @@ fun MainScreen(
     isReady: Boolean,
     onRequestHealthConnect: () -> Unit,
     onConnect: () -> Unit,
-    onRequestData: () -> Unit,
+    onRequestHealth: () -> Unit,
+    onRequestSleep: () -> Unit,
     onOpenSettings: () -> Unit,
     logger: MainActivity.UiLogger
 ) {
@@ -1150,10 +1162,17 @@ fun MainScreen(
                     }
 
                     Button(
-                        onClick = onRequestData,
+                        onClick = onRequestHealth,
                         enabled = isReady && blePermissionState == MainActivity.BlePermissionState.GRANTED
                     ) {
-                        Text("Get Ring Data")
+                        Text("Get Health Data")
+                    }
+
+                    Button(
+                        onClick = onRequestSleep,
+                        enabled = isReady && blePermissionState == MainActivity.BlePermissionState.GRANTED
+                    ) {
+                        Text("Get Sleep Data")
                     }
                 }
             }
