@@ -24,6 +24,9 @@ class PendingCommand:
 # Main ring class
 # ================================
 class SmartHealthR99:
+
+    OFFSET_2000 = 946_684_800  # seconds
+
     def __init__(self, mac: str, mtu: int = 185):
         self.mac = mac
         self.mtu = mtu
@@ -40,7 +43,7 @@ class SmartHealthR99:
         self.health_session: HealthSession | None = None
 
         self.group2_handlers = {
-            # 0: self.parse_device_info,
+            0: self.parse_device_info,
             # 1: self.parse_device_support_function,
             # 3: self.parse_device_name,
             # 9: self.parse_home_theme,
@@ -67,7 +70,7 @@ class SmartHealthR99:
             # 33: self.parse_laser_params,
             # 34: self.parse_ali_iot_state,
             # 35: self.parse_screen_params,
-            # 37: self.parse_power_stats,
+            37: self.parse_power_stats,
             38: self.parse_sleep_status,
             # 39: self.parse_ecg_mode,
             # 40: self.parse_measurement_function,
@@ -233,7 +236,7 @@ class SmartHealthR99:
                 self.send_queue.popleft()
                 self.cmd_ack = True
 
-        #print(f'{group} {subtype}')
+        # print(f'{group} {subtype}')
         match group:
             case 1:
                 self._handle_group_1(subtype, payload)
@@ -244,7 +247,6 @@ class SmartHealthR99:
                 await self._handle_group_5(subtype, payload)
                 if subtype == HealthSession.EndSubtype and self.cmd_ack:
                     popped = True
-
 
             # 🔑 THIS IS THE PUMP
         if popped and self.send_queue:
@@ -257,7 +259,7 @@ class SmartHealthR99:
     def _handle_group_2(self, subtype: int, payload: bytes):
         handler = self.group2_handlers.get(subtype)
         if handler:
-            handler(payload)
+            print(handler(payload))
 
     async def _handle_group_5(self, subtype: int, payload: bytes):
         if self.health_session is None:
@@ -304,6 +306,180 @@ class SmartHealthR99:
         # ---- Normal decode ----
         sleep_status = payload[0] & 0xFF
         print(f"😴 SleepStatus value: {sleep_status}")
+
+    def parse_device_info(self, payload: bytes):
+        """
+        Clean Python port of SmartHealth unpackDeviceInfoData()
+        """
+
+        # Strip BE94 wrapper: CMD(2), LEN(2), BODY, CRC(2)
+
+        device_info = {}
+
+        # ----------------------------------------
+        # Basic Fields (first 8 bytes)
+        # ----------------------------------------
+        device_id = payload[0] | (payload[1] << 8)
+        version_sub = payload[2]
+        version_main = payload[3]
+        battery_state = payload[4]
+        battery_value = payload[5]
+        bind_state = payload[6]
+        sync_state = payload[7]
+
+        version_str = f"{version_main}.{version_sub:02d}"
+
+        # Fill base fields
+        device_info.update(
+            {
+                "deviceId": device_id,
+                "deviceVersion": version_str,
+                "deviceBatteryState": battery_state,
+                "deviceBatteryValue": battery_value,
+                "deviceMainVersion": version_main,
+                "deviceSubVersion": version_sub,
+                "devicetBindState": bind_state,
+                "devicetSyncState": sync_state,
+            }
+        )
+
+        hardware_type = 0
+
+        # ----------------------------------------
+        # Optional Extended Fields (bytes 8..18)
+        # ----------------------------------------
+        if len(payload) >= 24:
+            device_info.update(
+                {
+                    "bleAgreementSubVersion": payload[8],
+                    "bleAgreementMainVersion": payload[9],
+                    "bloodAlgoSubVersion": payload[10],
+                    "bloodAlgoMainVersion": payload[11],
+                    "tpSubVersion": payload[12],
+                    "tpMainVersion": payload[13],
+                    "bloodSugarSubVersion": payload[14],
+                    "bloodSugarMainVersion": payload[15],
+                    "uiSubVersion": payload[16],
+                    "uiMainVersion": payload[17],
+                }
+            )
+
+            hardware_type = payload[18]
+
+        device_info["hardwareType"] = hardware_type
+
+        # ----------------------------------------
+        # Final output structure (matches Java)
+        # ----------------------------------------
+        out = {
+            "code": 0,
+            "dataType": 512,
+            "data": device_info,
+        }
+
+        # Debug print
+        print("📟 Device Info:")
+        for k, v in device_info.items():
+            print(f"\t{k}: {v}")
+
+        return out
+
+    def parse_power_stats(self, payload: bytes) -> dict:
+        """
+        Exact port of Java unpackGetPowerStatistics(byte[]).
+        Expects payload length >= 34 bytes.
+        All fields and math mirror SmartHealth behavior.
+        """
+
+        if payload is None or len(payload) < 34:
+            raise ValueError("Power statistics payload too short")
+
+        # Java: TimeZone.getDefault().getOffset(System.currentTimeMillis())
+        tz_offset_ms = int(time.localtime().tm_gmtoff * 1000)
+
+        # ---- lastChargingTime ----
+        last_charge_sec = (
+            (payload[0] & 0xFF)
+            | ((payload[1] & 0xFF) << 8)
+            | ((payload[2] & 0xFF) << 16)
+            | ((payload[3] & 0xFF) << 24)
+        )
+
+        last_charging_time_ms = (
+            last_charge_sec + self.OFFSET_2000
+        ) * 1000 - tz_offset_ms
+
+        # ---- durations / counters ----
+        usage_time = (
+            (payload[4] & 0xFF)
+            | ((payload[5] & 0xFF) << 8)
+            | ((payload[6] & 0xFF) << 16)
+            | ((payload[7] & 0xFF) << 24)
+        )
+
+        screen_duration = (
+            (payload[8] & 0xFF)
+            | ((payload[9] & 0xFF) << 8)
+            | ((payload[10] & 0xFF) << 16)
+            | ((payload[11] & 0xFF) << 24)
+        )
+
+        call_duration = (
+            (payload[12] & 0xFF)
+            | ((payload[13] & 0xFF) << 8)
+            | ((payload[14] & 0xFF) << 16)
+            | ((payload[15] & 0xFF) << 24)
+        )
+
+        music_duration = (
+            (payload[16] & 0xFF)
+            | ((payload[17] & 0xFF) << 8)
+            | ((payload[18] & 0xFF) << 16)
+            | ((payload[19] & 0xFF) << 24)
+        )
+
+        health_measurement_duration = (
+            (payload[20] & 0xFF)
+            | ((payload[21] & 0xFF) << 8)
+            | ((payload[22] & 0xFF) << 16)
+            | ((payload[23] & 0xFF) << 24)
+        )
+
+        messages_number = (
+            (payload[24] & 0xFF)
+            | ((payload[25] & 0xFF) << 8)
+            | ((payload[26] & 0xFF) << 16)
+            | ((payload[27] & 0xFF) << 24)
+        )
+
+        # ---- battery ----
+        last_charging_end_battery = payload[28] & 0xFF
+        battery_level = payload[29] & 0xFF
+
+        # ---- arated blood pressure ----
+        arated_blood_pressure = (
+            (payload[30] & 0xFF)
+            | ((payload[31] & 0xFF) << 8)
+            | ((payload[32] & 0xFF) << 16)
+            | ((payload[33] & 0xFF) << 24)
+        )
+
+        return {
+            "lastChargingTime": last_charging_time_ms,
+            "lastChargingDateTime": datetime.fromtimestamp(
+                last_charging_time_ms / 1000
+            ).strftime("%Y-%m-%d %H:%M:%S"),
+            "usageTime": usage_time,
+            # "screenDuration": screen_duration,
+            # "callDuration": call_duration,
+            # "musicDuration": music_duration,
+            "healthMeasurementDuration": health_measurement_duration,
+            # "messagesNumber": messages_number,
+            "lastChargingEndBattery": last_charging_end_battery,
+            "batteryLevel": battery_level,
+            # "aratedBloodPressure": arated_blood_pressure,
+            # "dataType": "GetPowerStatistics",
+        }
 
     # ============================
     # Utilities
@@ -360,7 +536,6 @@ class SmartHealthR99:
             )
 
 
-
 class HealthSession:
     SleepHealthHeader = 4
     HealthTypes = (SleepHealthHeader, 8, 9)
@@ -384,7 +559,7 @@ class HealthSession:
         Feed one health packet into the session.
         """
         # start of session
-        #print(f"{subtype} {payload}")
+        # print(f"{subtype} {payload}")
         if subtype in self.HealthTypes:
             self.health_type = subtype
             self.blocks.clear()
@@ -453,7 +628,9 @@ class HealthSession:
             )
             start_time = ((ts_sec + OFFSET_2000) * 1000) - TZ_OFFSET_MS
 
-            start_datetime = datetime.fromtimestamp(start_time/1000.0).strftime("%Y%m%d %H%M%S")
+            start_datetime = datetime.fromtimestamp(start_time / 1000.0).strftime(
+                "%Y%m%d %H%M%S"
+            )
 
             # ---- fields (EXACT Java mapping) ----
             step_value = (b[i + 4] & 0xFF) | ((b[i + 5] & 0xFF) << 8)
@@ -475,24 +652,24 @@ class HealthSession:
                 "startDateTime": start_datetime,
                 "stepValue": step_value,
                 "heartValue": heart_value,
-                #"SBPValue": sbp_value,
-                #"DBPValue": dbp_value,
+                # "SBPValue": sbp_value,
+                # "DBPValue": dbp_value,
                 "OOValue": oo_value,
                 "respiratoryRateValue": respiratory_rate,
                 "hrvValue": hrv_value,
                 "cvrrValue": cvrr_value,
                 "tempIntValue": temp_int,
                 "tempFloatValue": temp_float,
-                #"bodyFatIntValue": body_fat_int,
-                #"bodyFatFloatValue": body_fat_float,
-                #"bloodSugarValue": blood_sugar,
+                # "bodyFatIntValue": body_fat_int,
+                # "bodyFatFloatValue": body_fat_float,
+                # "bloodSugarValue": blood_sugar,
             }
 
             out["data"].append(record)
             i += RECORD_LEN
 
         return out
-        
+
     def unpack_Sleep_Data(self, raw: bytes, health_type: int) -> dict:
         OFFSET_2000 = 946684800
         TZ_OFFSET_MS = int(time.localtime().tm_gmtoff * 1000)
@@ -541,12 +718,8 @@ class HealthSession:
             else:
                 light_count = (b[i + 14] & 0xFF) | ((b[i + 15] & 0xFF) << 8)
                 rem_total = 0
-                deep_total = (
-                    ((b[i + 16] & 0xFF) | ((b[i + 17] & 0xFF) << 8)) * 60
-                )
-                light_total = (
-                    ((b[i + 18] & 0xFF) | ((b[i + 19] & 0xFF) << 8)) * 60
-                )
+                deep_total = ((b[i + 16] & 0xFF) | ((b[i + 17] & 0xFF) << 8)) * 60
+                light_total = ((b[i + 18] & 0xFF) | ((b[i + 19] & 0xFF) << 8)) * 60
 
             # ---- parse sleep segments ----
             sleep_segments = []
@@ -584,7 +757,9 @@ class HealthSession:
                         {
                             "sleepType": sleep_type,
                             "sleepStartTime": seg_time,
-                            "sleepStartDateTime": datetime.fromtimestamp(seg_time/1000).strftime("%Y%m%d %H%M%S"),
+                            "sleepStartDateTime": datetime.fromtimestamp(
+                                seg_time / 1000
+                            ).strftime("%Y%m%d %H%M%S"),
                             "sleepLen": dur,
                         }
                     )
@@ -595,9 +770,13 @@ class HealthSession:
             out["data"].append(
                 {
                     "startTime": start_time,
-                    "startDateTime": datetime.fromtimestamp(start_time/1000).strftime("%Y%m%d %H%M%S"),
+                    "startDateTime": datetime.fromtimestamp(start_time / 1000).strftime(
+                        "%Y%m%d %H%M%S"
+                    ),
                     "endTime": end_time,
-                    "endDateTime": datetime.fromtimestamp(end_time/1000).strftime("%Y%m%d %H%M%S"),
+                    "endDateTime": datetime.fromtimestamp(end_time / 1000).strftime(
+                        "%Y%m%d %H%M%S"
+                    ),
                     "deepSleepCount": deep_sleep_count,
                     "lightSleepCount": light_count,
                     "deepSleepTotal": deep_total,
@@ -614,15 +793,15 @@ class HealthSession:
         return out
 
 
-
 async def main():
     ring = SmartHealthR99("07:35:00:01:8A:EC", mtu=185)
     await ring.connect()
 
-    # await ring.send_cmd(550)
+    await ring.send_cmd(549)
 
-    #await ring.send_cmd(1284)
-    await ring.send_cmd(1289)
+    # await ring.send_cmd(1284)
+    # await ring.send_cmd(1289)
+    # await ring.send_cmd(512, bytes([71, 67]))
 
     print("📡 Requests sent, watching for notifications...")
     await asyncio.sleep(30)
