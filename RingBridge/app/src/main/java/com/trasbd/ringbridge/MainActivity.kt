@@ -447,14 +447,26 @@ class MainActivity : ComponentActivity() {
                     )
                 )
             }
-
-            healthConnectClient.insertRecords(records)
-            logger.log("RingBridge", "Posted ${records.count()} records")
-
-            HealthSession.DELETE_HEALTH_CMD.forEach {
-                SendCmd(it, HealthSession.DELETE_PAYLOAD)
-            }
         }
+
+           if (records.isEmpty()) {
+        logger.log("RingBridge", "⚠️ No records to insert")
+        return
+    }
+
+    try {
+        healthConnectClient.insertRecords(records)
+        logger.log("RingBridge", "✅ Posted ${records.size} records")
+
+        // ✅ Only delete after successful insert
+        HealthSession.DELETE_HEALTH_CMD.forEach {
+            SendCmd(it, HealthSession.DELETE_PAYLOAD)
+        }
+
+    } catch (e: Exception) {
+        logger.log("RingBridge", "❌ Health Connect insert failed: ${e.message}")
+        e.printStackTrace()
+    }
 
     }
 
@@ -491,9 +503,27 @@ class MainActivity : ComponentActivity() {
 
         }
 
-        healthConnectClient.insertRecords(sessions)
+        
+           if (sessions.isEmpty()) {
+        logger.log("RingBridge", "⚠️ No records to insert")
+        return
+    }
 
-        SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
+    try {
+        healthConnectClient.insertRecords(sessions)
+        logger.log("RingBridge", "✅ Posted ${sessions.size} records")
+
+        // ✅ Only delete after successful insert
+SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
+
+    } catch (e: Exception) {
+        logger.log("RingBridge", "❌ Health Connect insert failed: ${e.message}")
+        e.printStackTrace()
+    }
+
+ 
+
+        
 
     }
 
