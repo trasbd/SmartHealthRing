@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package com.trasbd.ringbridge
 
 import android.Manifest
@@ -108,7 +110,7 @@ class MainActivity : ComponentActivity() {
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
+    ) { _ ->
         updateBlePermissionState()
         if (blePermissionState == BlePermissionState.GRANTED) {
             startBle()
@@ -354,8 +356,7 @@ class MainActivity : ComponentActivity() {
                 if (subtype == HealthSession.END_SUBTYPE && cmdAck) {
                     popped = true
                 }
-                if (cmd in 1301..<1400)
-                    popped = true
+                if (cmd in 1301..<1400) popped = true
             }
         }
 
@@ -387,7 +388,7 @@ class MainActivity : ComponentActivity() {
             val data = session.parse()
             logger.log("RingBridge", data.toString())
 
-            lifecycleScope.launch  {
+            lifecycleScope.launch {
                 sendToHealthConnect(data)
             }
 
@@ -423,50 +424,35 @@ class MainActivity : ComponentActivity() {
 
                 records.add(
                     OxygenSaturationRecord(
-                        start,
-                        null,
-                        Percentage(session.ooValue.toDouble()),
-                        meta
+                        start, null, Percentage(session.ooValue.toDouble()), meta
                     )
                 )
                 records.add(HeartRateRecord(start, null, end, null, samples, meta))
                 records.add(
                     HeartRateVariabilityRmssdRecord(
-                        start,
-                        null,
-                        session.hrvValue.toDouble(),
-                        meta
+                        start, null, session.hrvValue.toDouble(), meta
                     )
                 )
                 records.add(
                     RespiratoryRateRecord(
-                        start,
-                        null,
-                        session.respiratoryRateValue.toDouble(),
-                        meta
+                        start, null, session.respiratoryRateValue.toDouble(), meta
                     )
                 )
             }
         }
 
-           if (records.isEmpty()) {
-        logger.log("RingBridge", "⚠️ No records to insert")
-        return
-    }
-
-    try {
-        healthConnectClient.insertRecords(records)
-        logger.log("RingBridge", "✅ Posted ${records.size} records")
-
-        // ✅ Only delete after successful insert
-        HealthSession.DELETE_HEALTH_CMD.forEach {
-            SendCmd(it, HealthSession.DELETE_PAYLOAD)
+        if (records.isEmpty()) {
+            logger.log("RingBridge", "⚠️ No records to insert")
+            return
         }
 
-    } catch (e: Exception) {
-        logger.log("RingBridge", "❌ Health Connect insert failed: ${e.message}")
-        e.printStackTrace()
-    }
+        if (postToHealthConnect(records)) {
+            // ✅ Only delete after successful insert
+            HealthSession.DELETE_HEALTH_CMD.forEach {
+                SendCmd(it, HealthSession.DELETE_PAYLOAD)
+            }
+        }
+
 
     }
 
@@ -503,29 +489,36 @@ class MainActivity : ComponentActivity() {
 
         }
 
-        
-           if (sessions.isEmpty()) {
-        logger.log("RingBridge", "⚠️ No records to insert")
-        return
-    }
 
-    try {
-        healthConnectClient.insertRecords(sessions)
-        logger.log("RingBridge", "✅ Posted ${sessions.size} records")
+        if (sessions.isEmpty()) {
+            logger.log("RingBridge", "⚠️ No records to insert")
+            return
+        }
 
-        // ✅ Only delete after successful insert
-SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
 
-    } catch (e: Exception) {
-        logger.log("RingBridge", "❌ Health Connect insert failed: ${e.message}")
-        e.printStackTrace()
-    }
+        if (postToHealthConnect(sessions)) {
+            // ✅ Only delete after successful insert
+            SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
+        }
 
- 
-
-        
 
     }
+
+    private suspend fun postToHealthConnect(records: List<Record>): Boolean {
+        try {
+            healthConnectClient.insertRecords(records)
+            logger.log("RingBridge", "✅ Posted ${records.size} records")
+
+
+        } catch (e: Exception) {
+            logger.log("RingBridge", "❌ Health Connect insert failed: ${e.message}")
+            e.printStackTrace()
+            return false
+        }
+        return true
+
+    }
+
 
     override fun onResume() {
         super.onResume()
@@ -579,7 +572,9 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
         HealthPermission.getReadPermission(RespiratoryRateRecord::class),
         HealthPermission.getWritePermission(RespiratoryRateRecord::class),
 
-    )
+        )
+
+    var healthConnectPermissionState: Boolean = false
 
     // Create the permissions launcher
     val requestPermissionActivityContract =
@@ -587,12 +582,23 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
 
     val requestPermissions =
         registerForActivityResult(requestPermissionActivityContract) { granted ->
-            if (granted.containsAll(PERMISSIONS)) {
-                // Permissions successfully granted
+
+            val missing = PERMISSIONS - granted
+            healthConnectPermissionState = missing.isEmpty()
+
+            if (healthConnectPermissionState) {
+                logger.log("RingBridge", "HealthConnect permissions granted")
             } else {
-                // Lack of required permissions
+                val missingNames = missing.joinToString("\n\t") { it }
+
+                logger.log(
+                    "RingBridge",
+                    "HealthConnect permission denied\nMissing:\n\t$missingNames"
+                )
+
             }
         }
+
 
     suspend fun checkPermissionsAndRun(healthConnectClient: HealthConnectClient) {
         val granted = healthConnectClient.permissionController.getGrantedPermissions()
@@ -646,12 +652,14 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
                     isConnected = isConnected,
                     isReady = isReady,
                     blePermissionState = blePermissionState,
+                    healthConnectPermissionState = healthConnectPermissionState,
                     onRequestHealth = { requestHealthData() },
                     onRequestSleep = { requestSleepData() },
                     onRequestHealthConnect = { requestHealthConnectPermissions() },
                     onConnect = { startBle() },
                     onOpenSettings = { openAppSettings() },
-                    logger = logger)
+                    logger = logger
+                )
             }
         }
 
@@ -691,8 +699,7 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    private fun requestSleepData()
-    {
+    private fun requestSleepData() {
         if (!isReady) {
             logger.log("RingBridge", "❌ Not ready yet")
             return
@@ -726,7 +733,9 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
             be94WriteChar, frame, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         )
         cmdAck = false
-        logger.log("RingBridge", "Sent ${pending.cmd} " + frame.joinToString(" ") { "%02X".format(it) })
+        logger.log(
+            "RingBridge",
+            "Sent ${pending.cmd} " + frame.joinToString(" ") { "%02X".format(it) })
 
     }
 
@@ -791,6 +800,7 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
             const val SLEEP_HEALTH_TYPE = 4
             const val ALL_HEALTH_TYPE = 9
             val HEALTH_TYPES = intArrayOf(SLEEP_HEALTH_TYPE, 8, ALL_HEALTH_TYPE)
+            
             const val END_SUBTYPE = 128
             const val END_COMMAND = 1408
             val END_PAYLOAD = byteArrayOf()
@@ -802,7 +812,8 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
             val SLEEP_TYPES = mutableMapOf<Int, Int>(
                 241 to SleepSessionRecord.STAGE_TYPE_DEEP,
                 242 to SleepSessionRecord.STAGE_TYPE_LIGHT,
-                243 to SleepSessionRecord.STAGE_TYPE_REM
+                243 to SleepSessionRecord.STAGE_TYPE_REM,
+                244 to SleepSessionRecord.STAGE_TYPE_AWAKE
             )
 
             const val OFFSET_2000 = 946684800L
@@ -868,13 +879,12 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
 
             val records = mutableListOf<HealthHistoryRecord>()
 
-            @Suppress("PrivatePropertyName")
-            val RECORD_LEN = 20
+            val recordLength = 20
             var i = 0
 
             val dateFormat = SimpleDateFormat("yyyyMMdd HHmmss", Locale.US)
 
-            while (i + RECORD_LEN <= raw.size) {
+            while (i + recordLength <= raw.size) {
 
                 // ---- timestamp ----
                 val tsSec =
@@ -916,7 +926,7 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
                     )
                 )
 
-                i += RECORD_LEN
+                i += recordLength
             }
 
             return HealthHistoryResult(
@@ -1119,12 +1129,12 @@ SendCmd(HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD)
     }
 
 
-
 }
 
 @Composable
 fun MainScreen(
     blePermissionState: MainActivity.BlePermissionState,
+    healthConnectPermissionState: Boolean,
     isConnected: Boolean,
     isReady: Boolean,
     onRequestHealthConnect: () -> Unit,
@@ -1198,7 +1208,7 @@ fun MainScreen(
                         text = "Health Connect", style = MaterialTheme.typography.titleMedium
                     )
 
-                    Button(onClick = onRequestHealthConnect) {
+                    Button(onClick = onRequestHealthConnect, enabled = !healthConnectPermissionState) {
                         Text("Grant Health Connect Permissions")
                     }
                 }
@@ -1243,10 +1253,9 @@ fun MainScreen(
                 }
             }
 
-            Card{
+            Card {
                 LogConsole(
-                    logs = logger.lines,
-                    modifier = Modifier.fillMaxWidth()
+                    logs = logger.lines, modifier = Modifier.fillMaxWidth()
                 )
 
             }
@@ -1266,16 +1275,13 @@ private fun StatusRow(text: String, icon: String) {
 }
 
 data class LogLine(
-    val time: String,
-    val level: String,
-    val message: String
+    val time: String, val level: String, val message: String
 )
 
 
 @Composable
 fun LogConsole(
-    logs: List<LogLine>,
-    modifier: Modifier = Modifier
+    logs: List<LogLine>, modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
 
@@ -1292,8 +1298,7 @@ fun LogConsole(
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             LazyColumn(
-                state = listState,
-                modifier = Modifier
+                state = listState, modifier = Modifier
                     .height(200.dp)
                     .fillMaxWidth()
             ) {
