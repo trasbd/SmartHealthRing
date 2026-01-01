@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,26 +19,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.trasbd.ringbridge.ui.theme.RingBridgeTheme
 import java.util.UUID
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.core.app.ActivityCompat
@@ -52,6 +44,14 @@ import androidx.health.connect.client.records.metadata.Device.Companion.TYPE_RIN
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.units.Percentage
 import androidx.lifecycle.lifecycleScope
+import com.trasbd.ringbridge.ble.FrameCodec
+import com.trasbd.ringbridge.ble.FrameCodec.buildBe94Frame
+import com.trasbd.ringbridge.ble.PendingCommand
+import com.trasbd.ringbridge.ble.RingUuids
+import com.trasbd.ringbridge.ui.MainScreen
+import com.trasbd.ringbridge.ui.StatusRow
+import com.trasbd.ringbridge.ui.uiLogger.LogConsole
+import com.trasbd.ringbridge.ui.uiLogger.UiLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -64,29 +64,6 @@ import java.util.TimeZone
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
-
-    @Suppress("ClassName", "unused")
-    private object RING_UUIDS {
-        val UUID_BE94_SERVICE: UUID = UUID.fromString("be940000-7333-be46-b7ae-689e71722bd5")
-
-        val UUID_BE94_WRITE: UUID = UUID.fromString("be940001-7333-be46-b7ae-689e71722bd5")
-        val UUID_BE94_WRITE2: UUID = UUID.fromString("be940002-7333-be46-b7ae-689e71722bd5")
-        val UUID_IND_BE94_SECOND: UUID = UUID.fromString("be940003-7333-be46-b7ae-689e71722bd5")
-
-        val UUID_NOTIFY_AE02: UUID = UUID.fromString("0000ae02-0000-1000-8000-00805f9b34fb")
-        val UUID_IND_FEA1: UUID = UUID.fromString("0000fea1-0000-1000-8000-00805f9b34fb")
-        val UUID_IND_FEA2: UUID = UUID.fromString("0000fea2-0000-1000-8000-00805f9b34fb")
-
-        val UUID_NOTIFY_NUS_TX: UUID = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e")
-
-        val NOTIFY_ALLOWLIST = setOf(
-            UUID_BE94_WRITE,
-            UUID_IND_BE94_SECOND,
-            UUID_NOTIFY_AE02,
-            UUID_IND_FEA2,
-            UUID_NOTIFY_NUS_TX
-        )
-    }
 
     @Suppress("PrivatePropertyName")
     private val RING_MAC = "07:35:00:01:8A:EC"
@@ -153,9 +130,9 @@ class MainActivity : ComponentActivity() {
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
 
             for (service in gatt.services) {
-                if (service.uuid == RING_UUIDS.UUID_BE94_SERVICE) {
+                if (service.uuid == RingUuids.UUID_BE94_SERVICE) {
                     for (ch in service.characteristics) {
-                        if (ch.uuid == RING_UUIDS.UUID_BE94_WRITE) {
+                        if (ch.uuid == RingUuids.UUID_BE94_WRITE) {
                             be94WriteChar = ch
                             isReady = true
                             logger.log("RingBridge", "✅ BE94 write characteristic ready")
@@ -164,7 +141,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 for (ch in service.characteristics) {
-                    if (ch.uuid !in RING_UUIDS.NOTIFY_ALLOWLIST) continue
+                    if (ch.uuid !in RingUuids.NOTIFY_ALLOWLIST) continue
 
                     val props = ch.properties
                     val canNotify = props and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
@@ -242,7 +219,7 @@ class MainActivity : ComponentActivity() {
                     if (value.isEmpty() || value.size < 4) return@withLock
 
                     val full = reassembleFrame(value) ?: return@withLock
-                    val frame = decodeFrame(full)
+                    val frame = FrameCodec.decodeFrame(full)
                     logger.log(
                         "RingBridge", "Received ${frame.group} ${frame.subtype} ${
                         frame.payload.joinToString(" ") {
@@ -308,23 +285,8 @@ class MainActivity : ComponentActivity() {
         return full
     }
 
-    @Suppress("ArrayInDataClass")
-    private data class DecodedFrame(
-        val group: Int, val subtype: Int, val payload: ByteArray
-    )
-
-    private fun decodeFrame(data: ByteArray): DecodedFrame {
-        val group = data[0].toInt() and 0xFF
-        val subtype = data[1].toInt() and 0xFF
 
 
-        val totalLen = (data[2].toInt() and 0xFF) or ((data[3].toInt() and 0xFF) shl 8)
-
-        val payloadLen = totalLen - 6
-        val payload = data.copyOfRange(4, 4 + payloadLen)
-
-        return DecodedFrame(group, subtype, payload)
-    }
 
     private var cmdAck: Boolean = false
 
@@ -708,10 +670,7 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    @Suppress("ArrayInDataClass")
-    private data class PendingCommand(
-        val cmd: Int, val group: Int, val subtype: Int, val payload: ByteArray = byteArrayOf()
-    )
+
 
     private val sendQueue = ArrayDeque<PendingCommand>()
 
@@ -739,61 +698,8 @@ class MainActivity : ComponentActivity() {
 
     }
 
-    fun buildBe94Frame(cmd: Int, payload: ByteArray): ByteArray {
-        val totalLen = payload.size + 6
-        val out = ByteArray(totalLen)
-
-        out[0] = ((cmd shr 8) and 0xFF).toByte()
-        out[1] = (cmd and 0xFF).toByte()
-        out[2] = (totalLen and 0xFF).toByte()
-        out[3] = ((totalLen shr 8) and 0xFF).toByte()
-
-        // payload
-        System.arraycopy(payload, 0, out, 4, payload.size)
-
-        // CRC over header + payload
-        val crc = crc16Ycbt(out.copyOfRange(0, 4 + payload.size))
-
-        out[4 + payload.size] = (crc and 0xFF).toByte()
-        out[5 + payload.size] = ((crc shr 8) and 0xFF).toByte()
-
-        return out
-    }
 
 
-    fun crc16Ycbt(data: ByteArray, seed: Int = 0xFFFF): Int {
-        var s = seed and 0xFFFF
-
-        for (b in data) {
-            val byte = b.toInt() and 0xFF
-
-            val swapped = ((s shl 8) and 0xFF00) or ((s ushr 8) and 0x00FF)
-            var s2 = swapped xor byte
-
-            s2 = s2 xor ((s2 and 0xFF) ushr 4)
-            val s3 = s2 xor ((s2 shl 12) and 0xFFFF)
-
-            s = s3 xor (((s3 and 0xFF) shl 5) and 0xFFFF)
-            s = s and 0xFFFF
-        }
-
-        return s
-    }
-
-    @Suppress("unused")
-    fun chunkForMtu(data: ByteArray, mtu: Int): List<ByteArray> {
-        val usable = mtu - 3
-        val chunks = mutableListOf<ByteArray>()
-
-        var i = 0
-        while (i < data.size) {
-            val end = minOf(i + usable, data.size)
-            chunks.add(data.copyOfRange(i, end))
-            i += usable
-        }
-
-        return chunks
-    }
 
     class HealthSession() {
         companion object {
@@ -1115,200 +1021,14 @@ class MainActivity : ComponentActivity() {
     val logger = UiLogger()
 
 
-    class UiLogger {
-        private val _lines = mutableStateListOf<LogLine>()
-        val lines: List<LogLine> = _lines
-
-        fun log(level: String, msg: String) {
-            Log.d("UiLogger", "$level: $msg")
-            val ts = java.time.LocalTime.now().toString()
-            _lines.add(LogLine(ts, level, msg))
-        }
-
-        fun clear() = _lines.clear()
-    }
 
 
 }
 
-@Composable
-fun MainScreen(
-    blePermissionState: MainActivity.BlePermissionState,
-    healthConnectPermissionState: Boolean,
-    isConnected: Boolean,
-    isReady: Boolean,
-    onRequestHealthConnect: () -> Unit,
-    onConnect: () -> Unit,
-    onRequestHealth: () -> Unit,
-    onRequestSleep: () -> Unit,
-    onOpenSettings: () -> Unit,
-    logger: MainActivity.UiLogger
-) {
-    Scaffold { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-
-            Text(
-                text = "Ring Bridge", style = MaterialTheme.typography.headlineMedium
-            )
-
-            /* ---------------- Bluetooth Permission ---------------- */
-
-            Card {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Bluetooth Permission", style = MaterialTheme.typography.titleMedium
-                    )
-
-                    when (blePermissionState) {
-                        MainActivity.BlePermissionState.GRANTED -> {
-                            StatusRow("Bluetooth access granted", "✅")
-                        }
-
-                        MainActivity.BlePermissionState.DENIED -> {
-                            StatusRow("Bluetooth permission required", "⚠️")
-                            Text(
-                                text = "Please allow Bluetooth access when prompted.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-
-                        MainActivity.BlePermissionState.PERMANENTLY_DENIED -> {
-                            StatusRow("Bluetooth permission denied", "❌")
-                            Text(
-                                text = "Enable Bluetooth permission in system settings.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-
-                            Button(
-                                onClick = onOpenSettings, modifier = Modifier.padding(top = 8.dp)
-                            ) {
-                                Text("Open App Settings")
-                            }
-                        }
-                    }
-                }
-            }
-
-            /* ---------------- Health Connect ---------------- */
-
-            Card {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Health Connect", style = MaterialTheme.typography.titleMedium
-                    )
-
-                    Button(onClick = onRequestHealthConnect, enabled = !healthConnectPermissionState) {
-                        Text("Grant Health Connect Permissions")
-                    }
-                }
-            }
-
-            /* ---------------- Ring Connection ---------------- */
-
-            Card {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Ring Status", style = MaterialTheme.typography.titleMedium
-                    )
-
-                    StatusRow(
-                        text = if (isConnected) "Ring connected" else "Not connected",
-                        icon = if (isConnected) "🟢" else "🔴"
-                    )
-
-                    Button(
-                        onClick = onConnect,
-                        enabled = blePermissionState == MainActivity.BlePermissionState.GRANTED && !isConnected
-                    ) {
-                        Text("Connect to Ring")
-                    }
-
-                    Button(
-                        onClick = onRequestHealth,
-                        enabled = isReady && blePermissionState == MainActivity.BlePermissionState.GRANTED
-                    ) {
-                        Text("Get Health Data")
-                    }
-
-                    Button(
-                        onClick = onRequestSleep,
-                        enabled = isReady && blePermissionState == MainActivity.BlePermissionState.GRANTED
-                    ) {
-                        Text("Get Sleep Data")
-                    }
-                }
-            }
-
-            Card {
-                LogConsole(
-                    logs = logger.lines, modifier = Modifier.fillMaxWidth()
-                )
-
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatusRow(text: String, icon: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(icon)
-        Text(text)
-    }
-}
-
-data class LogLine(
-    val time: String, val level: String, val message: String
-)
 
 
-@Composable
-fun LogConsole(
-    logs: List<LogLine>, modifier: Modifier = Modifier
-) {
-    val listState = rememberLazyListState()
 
-    LaunchedEffect(logs.size) {
-        if (logs.isNotEmpty()) {
-            listState.animateScrollToItem(logs.lastIndex)
-        }
-    }
 
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Text("Console", style = MaterialTheme.typography.titleMedium)
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-            LazyColumn(
-                state = listState, modifier = Modifier
-                    .height(200.dp)
-                    .fillMaxWidth()
-            ) {
-                items(logs) { line ->
-                    Text(
-                        text = "[${line.time}] ${line.level}: ${line.message}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-    }
-}
+
