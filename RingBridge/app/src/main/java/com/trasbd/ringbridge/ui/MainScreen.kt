@@ -12,23 +12,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.trasbd.ringbridge.MainActivity
-import com.trasbd.ringbridge.ui.uiLogger.LogConsole
-import com.trasbd.ringbridge.ui.uiLogger.UiLogger
+import com.trasbd.lib.permission.PermissionModel
+import com.trasbd.lib.uiLogger.LogConsole
+import com.trasbd.lib.uiLogger.UiLogger
 
 @Composable
 fun MainScreen(
-    blePermissionState: MainActivity.BlePermissionState,
-    healthConnectPermissionState: Boolean,
+    blePermissionState: PermissionModel.PermissionState,
+    healthConnectPermissionState: PermissionModel.PermissionState,
     isConnected: Boolean,
     isReady: Boolean,
-    onRequestHealthConnect: () -> Unit,
+    onRequestHealthConnectPermission: () -> Unit,
+    onRequestBLEPermission: () -> Unit,
     onConnect: () -> Unit,
     onRequestHealth: () -> Unit,
     onRequestSleep: () -> Unit,
-    onOpenSettings: () -> Unit,
     logger: UiLogger
-) {
+)
+{
     Scaffold { padding ->
         Column(
             modifier = Modifier
@@ -53,11 +54,12 @@ fun MainScreen(
                     )
 
                     when (blePermissionState) {
-                        MainActivity.BlePermissionState.GRANTED -> {
+                        PermissionModel.PermissionState.GRANTED -> {
                             StatusRow("Bluetooth access granted", "✅")
                         }
 
-                        MainActivity.BlePermissionState.DENIED -> {
+                        PermissionModel.PermissionState.DENIED,
+                        PermissionModel.PermissionState.PARTIAL -> {
                             StatusRow("Bluetooth permission required", "⚠️")
                             Text(
                                 text = "Please allow Bluetooth access when prompted.",
@@ -65,20 +67,25 @@ fun MainScreen(
                             )
                         }
 
-                        MainActivity.BlePermissionState.PERMANENTLY_DENIED -> {
+                        PermissionModel.PermissionState.PERMANENTLY_DENIED -> {
                             StatusRow("Bluetooth permission denied", "❌")
                             Text(
                                 text = "Enable Bluetooth permission in system settings.",
                                 style = MaterialTheme.typography.bodySmall
                             )
-
                             Button(
-                                onClick = onOpenSettings, modifier = Modifier.padding(top = 8.dp)
+                                onClick = onRequestBLEPermission,
+                                modifier = Modifier.padding(top = 8.dp)
                             ) {
                                 Text("Open App Settings")
                             }
                         }
+
+                        PermissionModel.PermissionState.UNKNOWN -> {
+                            StatusRow("Bluetooth permission unknown", "❓")
+                        }
                     }
+
                 }
             }
 
@@ -93,9 +100,18 @@ fun MainScreen(
                         text = "Health Connect", style = MaterialTheme.typography.titleMedium
                     )
 
-                    Button(onClick = onRequestHealthConnect, enabled = !healthConnectPermissionState) {
-                        Text("Grant Health Connect Permissions")
+                    Button(
+                        onClick = onRequestHealthConnectPermission,
+                        enabled = healthConnectPermissionState != PermissionModel.PermissionState.GRANTED
+                    ) {
+                        Text(
+                            if (healthConnectPermissionState == PermissionModel.PermissionState.GRANTED)
+                                "Health Connect Granted"
+                            else
+                                "Grant Health Connect Permissions"
+                        )
                     }
+
                 }
             }
 
@@ -117,21 +133,21 @@ fun MainScreen(
 
                     Button(
                         onClick = onConnect,
-                        enabled = blePermissionState == MainActivity.BlePermissionState.GRANTED && !isConnected
+                        enabled = blePermissionState == PermissionModel.PermissionState.GRANTED && !isConnected
                     ) {
                         Text("Connect to Ring")
                     }
 
                     Button(
                         onClick = onRequestHealth,
-                        enabled = isReady && blePermissionState == MainActivity.BlePermissionState.GRANTED
+                        enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED
                     ) {
                         Text("Get Health Data")
                     }
 
                     Button(
                         onClick = onRequestSleep,
-                        enabled = isReady && blePermissionState == MainActivity.BlePermissionState.GRANTED
+                        enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED
                     ) {
                         Text("Get Sleep Data")
                     }

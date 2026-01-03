@@ -1,6 +1,58 @@
 package com.trasbd.ringbridge.ble
 
+import kotlinx.coroutines.sync.Mutex
+
 object FrameCodec {
+
+    val rxMutex = Mutex()
+
+    var rxBuffer: ByteArray? = null
+    var rxFragmented: Boolean = false
+
+    const val MTU = 185 // match Python
+
+    fun reassembleFrame(data: ByteArray): ByteArray? {
+        if (data.size < 4) return null
+
+        val expectedLen = (data[2].toInt() and 0xFF) or ((data[3].toInt() and 0xFF) shl 8)
+
+        // Fast path: full frame arrived
+        if (expectedLen == data.size) {
+            return data
+        }
+
+        // Length mismatch path
+        if (!rxFragmented && data.size != MTU - 3) {
+            return null
+        }
+
+        rxFragmented = true
+
+        if (rxBuffer == null) {
+            rxBuffer = data.copyOf()
+            return null
+        }
+
+        rxBuffer = rxBuffer!! + data
+
+        if (rxBuffer!!.size < 4) return null
+
+        val newExpected =
+            (rxBuffer!![2].toInt() and 0xFF) or ((rxBuffer!![3].toInt() and 0xFF) shl 8)
+
+        if (rxBuffer!!.size < newExpected) return null
+
+        if (rxBuffer!!.size > newExpected) {
+            rxBuffer = null
+            rxFragmented = false
+            return null
+        }
+
+        val full = rxBuffer
+        rxBuffer = null
+        rxFragmented = false
+        return full
+    }
     fun decodeFrame(data: ByteArray): DecodedFrame {
         val group = data[0].toInt() and 0xFF
         val subtype = data[1].toInt() and 0xFF

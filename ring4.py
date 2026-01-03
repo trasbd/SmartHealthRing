@@ -3,7 +3,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Optional
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 from bleak import BleakClient
 from bleak.exc import BleakDeviceNotFoundError

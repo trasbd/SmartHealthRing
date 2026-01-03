@@ -3,12 +3,13 @@
 package com.trasbd.ringbridge.protocol
 
 import androidx.health.connect.client.records.SleepSessionRecord
+import com.trasbd.lib.ILogger
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-class HealthSession() {
+class HealthSession(logger: ILogger) {
     companion object {
         const val SLEEP_HEALTH_TYPE = 4
         const val ALL_HEALTH_TYPE = 9

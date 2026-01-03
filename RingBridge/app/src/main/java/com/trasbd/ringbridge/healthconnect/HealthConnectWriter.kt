@@ -12,7 +12,7 @@ import androidx.health.connect.client.records.metadata.Device.Companion.TYPE_RIN
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.units.Percentage
 import com.trasbd.ringbridge.protocol.HealthSession
-import com.trasbd.ringbridge.ui.uiLogger.UiLogger
+import com.trasbd.lib.uiLogger.UiLogger
 import java.time.Instant
 
 class HealthConnectWriter(
