@@ -17,6 +17,7 @@ import com.trasbd.ringbridge.ble.FrameCodec.reassembleFrame
 import com.trasbd.ringbridge.ble.FrameCodec.rxMutex
 import com.trasbd.ringbridge.healthconnect.HealthConnectWriter
 import com.trasbd.ringbridge.protocol.HealthSession
+import com.trasbd.ringbridge.protocol.PowerStats
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,10 @@ class RingClient(
     private val logger: ILogger
 ) {
 
+    companion object{
+        const val OFFSET_2000 = 946_684_800 // seconds
+    }
+
     // ----- Connected -----
     private val _isConnected = MutableStateFlow(false)
     val isConnected = _isConnected.asStateFlow()
@@ -42,7 +47,17 @@ class RingClient(
     private val _isReady = MutableStateFlow(false)
     val isReady = _isReady.asStateFlow()
 
+
+
+
     private var healthSession: HealthSession? = null
+
+    private var powerStats = PowerStats(context, logger)
+    val batteryLevel
+        get() = powerStats.batteryLevel
+
+    val chargeDateTime
+        get() = powerStats.chargeDateTime
 
     private lateinit var bluetoothGatt: BluetoothGatt
     private var cmdAck: Boolean = false
@@ -87,8 +102,8 @@ class RingClient(
                     for (ch in service.characteristics) {
                         if (ch.uuid == RingUuids.UUID_BE94_WRITE) {
                             be94WriteChar = ch
-                            _isReady.value = true
                             logger.i("RingBridge", "✅ BE94 write characteristic ready")
+
                         }
                     }
                 }
@@ -138,6 +153,8 @@ class RingClient(
             val (d, v) = cccdQueue.removeFirstOrNull() ?: run {
                 cccdWriting = false
                 logger.i("RingBridge", "✅ All CCCDs written")
+                _isReady.value = true
+                requestBatteryData()
                 return
             }
 
@@ -209,7 +226,7 @@ class RingClient(
                 popped = true
             }
 
-            5 -> {
+            HealthSession.HEALTH_GROUP -> {
                 handleGroup5(subtype, payload)
                 if (subtype == HealthSession.END_SUBTYPE && cmdAck) {
                     popped = true
@@ -248,25 +265,34 @@ class RingClient(
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun requestBatteryData()
+    {
+        sendCmd(cmd(PowerStats.POWER_GROUP, PowerStats.POWER_TYPE))
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun requestHealthData() {
-        if (!isReady.value) {
-            logger.e("RingBridge", "❌ Not ready yet")
-            return
-        }
-        sendCmd(1289)
+        sendCmd(cmd(HealthSession.HEALTH_GROUP, HealthSession.ALL_HEALTH_TYPE))
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun requestSleepData() {
+        sendCmd(cmd(HealthSession.HEALTH_GROUP, HealthSession.SLEEP_HEALTH_TYPE))
+    }
+
+    fun cmd(group: Int, type: Int): Int {
+        require(group in 0..0xFF)
+        require(type in 0..0xFF)
+        return (group shl 8) or type
+    }
+
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun sendCmd(cmd: Int, payload: ByteArray = byteArrayOf()) {
         if (!isReady.value) {
             logger.e("RingBridge", "❌ Not ready yet")
             return
         }
-        sendCmd(0x504)
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun sendCmd(cmd: Int, payload: ByteArray = byteArrayOf()) {
         val pending = PendingCommand(cmd, cmd shr 8 and 0xFF, cmd and 0xFF, payload)
         sendQueue.add(pending)
         if (sendQueue.count() == 1) {
@@ -291,11 +317,17 @@ class RingClient(
     }
 
     private fun handleGroup1(subtype: Int, payload: ByteArray) {
-
+        throw NotImplementedError("Group 1 not handled")
     }
 
     private fun handleGroup2(subtype: Int, payload: ByteArray) {
-
+        when(subtype)
+        {
+            PowerStats.POWER_TYPE -> {
+                powerStats.ingest(payload)
+            }
+            else -> throw NotImplementedError("Group 2 Type $subtype not handled")
+        }
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)

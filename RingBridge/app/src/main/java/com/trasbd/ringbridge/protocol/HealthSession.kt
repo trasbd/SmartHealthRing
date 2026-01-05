@@ -4,6 +4,7 @@ package com.trasbd.ringbridge.protocol
 
 import androidx.health.connect.client.records.SleepSessionRecord
 import com.trasbd.lib.ILogger
+import com.trasbd.ringbridge.ble.RingClient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -11,6 +12,8 @@ import java.util.TimeZone
 
 class HealthSession(logger: ILogger) {
     companion object {
+
+        const val HEALTH_GROUP = 5
         const val SLEEP_HEALTH_TYPE = 4
         const val ALL_HEALTH_TYPE = 9
         val HEALTH_TYPES = intArrayOf(SLEEP_HEALTH_TYPE, 8, ALL_HEALTH_TYPE)
@@ -30,7 +33,7 @@ class HealthSession(logger: ILogger) {
             244 to SleepSessionRecord.STAGE_TYPE_AWAKE
         )
 
-        const val OFFSET_2000 = 946684800L
+        const val OFFSET_2000 = RingClient.OFFSET_2000 // seconds
     }
 
     var healthType: Int? = null

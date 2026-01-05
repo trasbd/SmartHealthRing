@@ -1,5 +1,6 @@
 package com.trasbd.ringbridge
 
+import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -37,6 +38,7 @@ class MainActivity : ComponentActivity() {
     private var bleState = mutableStateOf(PermissionModel.PermissionState.UNKNOWN)
     private var hcState = mutableStateOf(PermissionModel.PermissionState.UNKNOWN)
 
+    @SuppressLint("MissingPermission")
     private val bleLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             lifecycleScope.launch {
@@ -53,6 +55,7 @@ class MainActivity : ComponentActivity() {
                 hcState.value = healthConnectPermissions.update()
             }
         }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -62,11 +65,11 @@ class MainActivity : ComponentActivity() {
         ring = RingClient(this, RING_MAC, healthWriter, logger)
 
         blePermissions = BluetoothPermission(this, bleLauncher, logger)
-        healthConnectPermissions = HealthConnectPermission(this, healthConnectClient, healthConnectLauncher, logger)
+        healthConnectPermissions =
+            HealthConnectPermission(this, healthConnectClient, healthConnectLauncher, logger)
 
-        if(blePermissions.permissionState != PermissionModel.PermissionState.GRANTED)
-        {
-            lifecycleScope.launch {  blePermissions.request() }
+        if (blePermissions.permissionState != PermissionModel.PermissionState.GRANTED) {
+            lifecycleScope.launch { blePermissions.request() }
         }
 
 
@@ -77,15 +80,19 @@ class MainActivity : ComponentActivity() {
                 // 2. COLLECT the flows from RingClient here
                 val isConnected by ring.isConnected.collectAsState()
                 val isReady by ring.isReady.collectAsState()
-
-                MainScreen(
+                val batteryLevel by ring.batteryLevel.collectAsState()
+                val chargeDate by ring.chargeDateTime.collectAsState()
+                @SuppressLint("MissingPermission") MainScreen(
                     blePermissionState = bleState.value,
                     healthConnectPermissionState = hcState.value,
-                    isConnected = isConnected, // Now passing a Boolean
-                    isReady = isReady,         // Now passing a Boolean
+                    isConnected = isConnected,
+                    isReady = isReady,
+                    batteryLevel = batteryLevel,
+                    chargeDateTime = chargeDate,
                     onRequestHealthConnectPermission = { lifecycleScope.launch { healthConnectPermissions.request() } },
                     onRequestBLEPermission = { lifecycleScope.launch { blePermissions.request() } },
                     onConnect = { ring.connect() },
+                    onRequestBattery = {ring.requestBatteryData()},
                     onRequestHealth = { ring.requestHealthData() },
                     onRequestSleep = { ring.requestSleepData() },
                     logger = logger
