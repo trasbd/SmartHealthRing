@@ -69,7 +69,7 @@ class PowerStats(private val context: Context, private val logger: ILogger) {
     val chargeDateTime: StateFlow<LocalDateTime?> = _lastChargingTimeMs
         .map { ms ->
             ms?.let {
-                LocalDateTime.ofInstant(Instant.ofEpochMilli(it), ZoneId.of("UTC"))
+                LocalDateTime.ofInstant(Instant.ofEpochMilli(it), ZoneId.systemDefault())
             }
         }
         .stateIn(
