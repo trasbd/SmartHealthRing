@@ -27,7 +27,6 @@ import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 
-
 class RingClient(
     private val context: Context,
     private val mac: String,
@@ -35,8 +34,14 @@ class RingClient(
     private val logger: ILogger
 ) {
 
-    companion object{
+    companion object {
         const val OFFSET_2000 = 946_684_800 // seconds
+
+        fun cmd(group: Int, type: Int): Int {
+            require(group in 0..0xFF)
+            require(type in 0..0xFF)
+            return (group shl 8) or type
+        }
     }
 
     // ----- Connected -----
@@ -46,8 +51,6 @@ class RingClient(
     // ----- Ready -----
     private val _isReady = MutableStateFlow(false)
     val isReady = _isReady.asStateFlow()
-
-
 
 
     private var healthSession: HealthSession? = null
@@ -180,8 +183,8 @@ class RingClient(
         ) {
             logger.d(
                 "RingBridge", "NOTIFY ${characteristic.uuid}: ${
-                    value.joinToString(" ") { "%02X".format(it) }
-                }")
+                value.joinToString(" ") { "%02X".format(it) }
+            }")
 
             // Fire-and-forget coroutine (matches asyncio.create_task)
             CoroutineScope(Dispatchers.IO).launch {
@@ -192,10 +195,10 @@ class RingClient(
                     val frame = FrameCodec.decodeFrame(full)
                     logger.d(
                         "RingBridge", "Received ${frame.group} ${frame.subtype} ${
-                            frame.payload.joinToString(" ") {
-                                "%02X".format(it)
-                            }
-                        }")
+                        frame.payload.joinToString(" ") {
+                            "%02X".format(it)
+                        }
+                    }")
                     handleFrame(frame.group, frame.subtype, frame.payload)
                 }
             }
@@ -207,7 +210,7 @@ class RingClient(
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleFrame(group: Int, subtype: Int, payload: ByteArray) {
         var popped = false
-        val cmd = (group shl 8) or subtype
+        val cmd = cmd(group, subtype)
         if (sendQueue.count() > 0) {
             val head = sendQueue[0]
             if ((head.group == group && head.subtype == subtype) || (cmd in 1301..<1400 && head.cmd in 1301..<1400)) {
@@ -226,13 +229,24 @@ class RingClient(
                 popped = true
             }
 
+            3 -> {
+                handleGroup3(subtype, payload)
+                popped = cmdAck
+            }
+
             HealthSession.HEALTH_GROUP -> {
-                handleGroup5(subtype, payload)
+                handleHealth(group, subtype, payload)
                 if (subtype == HealthSession.END_SUBTYPE && cmdAck) {
                     popped = true
                 }
                 if (cmd in 1301..<1400) popped = true
             }
+
+            6 -> {
+                handleGroup6(subtype, payload)
+            }
+
+
         }
 
         if (popped && sendQueue.count() > 0) {
@@ -240,6 +254,26 @@ class RingClient(
         }
 
 
+    }
+
+    private fun handleGroup6(subtype: Int, payload: ByteArray) {
+        when (subtype) {
+            HealthSession.HR_LIVE_TYPE -> {
+                handleHealth(HealthSession.HR_LIVE_GROUP, subtype, payload)
+            }
+
+            else -> throw NotImplementedError("Group 6 subtype")
+        }
+    }
+
+    private fun handleGroup3(subtype: Int, payload: ByteArray) {
+        when (subtype) {
+            HealthSession.HR_LIVE_CMD_TYPE -> {
+                handleHealth(HealthSession.HR_LIVE_CMD_GROUP, subtype, payload)
+            }
+
+            else -> throw NotImplementedError("Group 3 subtype")
+        }
     }
 
 
@@ -265,9 +299,18 @@ class RingClient(
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun requestBatteryData()
-    {
+    fun requestBatteryData() {
         sendCmd(cmd(PowerStats.POWER_GROUP, PowerStats.POWER_TYPE))
+    }
+
+    fun startLiveHRSession()
+    {
+        sendCmd(cmd(HealthSession.HR_LIVE_CMD_GROUP, HealthSession.HR_LIVE_CMD_TYPE), HealthSession.HR_LIVE_START_PAYLOAD)
+    }
+
+    fun stopLiveHRSession()
+    {
+        sendCmd(cmd(HealthSession.HR_LIVE_CMD_GROUP, HealthSession.HR_LIVE_CMD_TYPE), HealthSession.HR_LIVE_STOP_PAYLOAD)
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -278,12 +321,6 @@ class RingClient(
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun requestSleepData() {
         sendCmd(cmd(HealthSession.HEALTH_GROUP, HealthSession.SLEEP_HEALTH_TYPE))
-    }
-
-    fun cmd(group: Int, type: Int): Int {
-        require(group in 0..0xFF)
-        require(type in 0..0xFF)
-        return (group shl 8) or type
     }
 
 
@@ -299,6 +336,7 @@ class RingClient(
             sendPending(pending)
         }
     }
+
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun sendPending(pending: PendingCommand) {
         if (!::bluetoothGatt.isInitialized) {
@@ -311,8 +349,7 @@ class RingClient(
         )
         cmdAck = false
         logger.d(
-            "RingBridge",
-            "Sent ${pending.cmd} " + frame.joinToString(" ") { "%02X".format(it) })
+            "RingBridge", "Sent ${pending.cmd} " + frame.joinToString(" ") { "%02X".format(it) })
 
     }
 
@@ -321,46 +358,46 @@ class RingClient(
     }
 
     private fun handleGroup2(subtype: Int, payload: ByteArray) {
-        when(subtype)
-        {
+        when (subtype) {
             PowerStats.POWER_TYPE -> {
                 powerStats.ingest(payload)
             }
+
             else -> throw NotImplementedError("Group 2 Type $subtype not handled")
         }
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    private fun handleGroup5(subtype: Int, payload: ByteArray) {
+    private fun handleHealth(group: Int, subtype: Int, payload: ByteArray) {
         val session = healthSession ?: HealthSession(logger).also {
             healthSession = it
         }
 
-        session.ingest(subtype, payload)
+        session.ingest(group, subtype, payload)
 
         if (session.complete) {
             healthSession = null
             val data = session.parse()
             logger.d("RingBridge", data.toString())
             scope.launch {
-                if(healthWriter.write(data))
-                {
-                    when (data){
-                        is HealthSession.SleepResult -> sendCmd(HealthSession.DELETE_SLEEP_CMD,
-                            HealthSession.DELETE_PAYLOAD)
-                        is HealthSession.HealthHistoryResult -> HealthSession.DELETE_HEALTH_CMD.forEach { sendCmd(it,
-                            HealthSession.DELETE_PAYLOAD) }
+                if (healthWriter.write(data)) {
+                    when (data) {
+                        is HealthSession.SleepResult -> sendCmd(
+                            HealthSession.DELETE_SLEEP_CMD, HealthSession.DELETE_PAYLOAD
+                        )
+
+                        is HealthSession.HealthHistoryResult -> HealthSession.DELETE_HEALTH_CMD.forEach {
+                            sendCmd(
+                                it, HealthSession.DELETE_PAYLOAD
+                            )
+                        }
                     }
                 }
             }
 
 
-
-
         }
     }
-
-
 
 
 }

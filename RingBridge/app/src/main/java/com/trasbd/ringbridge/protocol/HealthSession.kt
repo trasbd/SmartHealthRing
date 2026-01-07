@@ -6,6 +6,7 @@ import androidx.health.connect.client.records.SleepSessionRecord
 import com.trasbd.lib.ILogger
 import com.trasbd.ringbridge.ble.RingClient
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -18,6 +19,14 @@ class HealthSession(logger: ILogger) {
         const val ALL_HEALTH_TYPE = 9
         val HEALTH_TYPES = intArrayOf(SLEEP_HEALTH_TYPE, 8, ALL_HEALTH_TYPE)
 
+
+        const val HR_LIVE_CMD_GROUP = 3
+        const val HR_LIVE_CMD_TYPE = 47
+        val HR_LIVE_START_PAYLOAD = byteArrayOf(0x01, 0x00)
+        val HR_LIVE_STOP_PAYLOAD = byteArrayOf(0x00, 0x00)
+        const val HR_LIVE_GROUP = 6
+        const val HR_LIVE_TYPE = 1
+
         const val END_SUBTYPE = 128
         const val END_COMMAND = 1408
         val END_PAYLOAD = byteArrayOf()
@@ -26,7 +35,7 @@ class HealthSession(logger: ILogger) {
         val DELETE_HEALTH_CMD = listOf(1344, 1346, 1347, 1348)
         const val DELETE_SLEEP_CMD = 1345
 
-        val SLEEP_TYPES = mutableMapOf<Int, Int>(
+        val SLEEP_TYPES = mapOf<Int, Int>(
             241 to SleepSessionRecord.STAGE_TYPE_DEEP,
             242 to SleepSessionRecord.STAGE_TYPE_LIGHT,
             243 to SleepSessionRecord.STAGE_TYPE_REM,
@@ -40,9 +49,13 @@ class HealthSession(logger: ILogger) {
     var blocks = mutableListOf<ByteArray>()
     var complete: Boolean = false
 
-    fun ingest(subtype: Int, payload: ByteArray) {
-        if (HEALTH_TYPES.contains(subtype)) {
-            healthType = subtype
+    var start: Instant? = null
+    var end: Instant? = null
+
+    fun ingest(group:Int, subtype: Int, payload: ByteArray) {
+        if ((HEALTH_TYPES.contains(subtype)&& group == HEALTH_GROUP) || (group == HR_LIVE_GROUP && subtype == HR_LIVE_CMD_TYPE && payload.contentEquals(HR_LIVE_START_PAYLOAD))) {
+            start = Instant.now()
+            healthType = RingClient.cmd(group, subtype)
             blocks = mutableListOf()
             complete = false
             return
@@ -51,9 +64,17 @@ class HealthSession(logger: ILogger) {
         if (healthType == null) {
             return
         }
+
+        if ((group == HR_LIVE_GROUP && subtype == HR_LIVE_CMD_TYPE && payload.contentEquals(HR_LIVE_STOP_PAYLOAD))) {
+            end = Instant.now()
+            complete = true
+            return
+        }
+
         blocks.add(payload)
 
-        if (subtype == END_SUBTYPE) {
+        if ((group == HEALTH_GROUP && subtype == END_SUBTYPE)) {
+            end = Instant.now()
             complete = true
         }
     }
@@ -71,17 +92,29 @@ class HealthSession(logger: ILogger) {
             offset += b.size
         }
 
-        return unpackHealthData(raw, type)
+        return unpackHealthData(raw, type, start, end)
     }
 
-    fun unpackHealthData(raw: ByteArray, healthType: Int): Any {
+    fun unpackHealthData(raw: ByteArray, healthType: Int, start: Instant?, end: Instant?): Any {
         return when (healthType) {
-            SLEEP_HEALTH_TYPE -> unpackSleepData(raw, healthType)
-            ALL_HEALTH_TYPE -> unpackHealthHistoryAll(raw, healthType)
+            RingClient.cmd(HEALTH_GROUP, SLEEP_HEALTH_TYPE) -> unpackSleepData(raw, healthType)
+            RingClient.cmd(HEALTH_GROUP, ALL_HEALTH_TYPE) -> unpackHealthHistoryAll(raw, healthType)
+            RingClient.cmd(HR_LIVE_CMD_GROUP, HR_LIVE_CMD_TYPE) -> unpackLiveHRData(raw, healthType, start, end)
             else -> throw NotImplementedError(
                 "Health type $healthType not implemented yet"
             )
         }
+    }
+
+    private fun unpackLiveHRData(raw: ByteArray, healthType: Int, start: Instant?, end: Instant? = Instant.now()): LiveHRSession {
+
+        requireNotNull(start)
+        requireNotNull(end)
+        require(end.isAfter(start)) {
+            "Live HR end must be after start (start=$start, end=$end)"
+        }
+
+        return LiveHRSession(start, end,  raw.map { it.toInt() and 0xFF })
     }
 
 
@@ -282,6 +315,11 @@ class HealthSession(logger: ILogger) {
         )
     }
 
+    data class LiveHRSession(
+        val startTime: Instant,
+        val endTime: Instant,
+        val heartValues: List<Int>
+    )
 
     data class HealthHistoryRecord(
         val startTime: Long,

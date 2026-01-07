@@ -1,12 +1,9 @@
 package com.trasbd.ringbridge.protocol
 
 import android.content.Context
-import androidx.lifecycle.lifecycleScope
 import com.trasbd.lib.ILogger
 import com.trasbd.lib.utilities.getLifecycleScope
-import com.trasbd.ringbridge.MainActivity
 import com.trasbd.ringbridge.ble.RingClient
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -46,7 +43,7 @@ class PowerStats(private val context: Context, private val logger: ILogger) {
     val messagesNumber get() = _messagesNumber.asStateFlow()
     val lastChargingEndBattery get() = _lastChargingEndBattery.asStateFlow()
     val batteryLevel get() = _batteryLevel.asStateFlow()
-    val aratedBloodPressure get() = _aratedBloodPressure.asStateFlow()
+    val aeratedBloodPressure get() = _aeratedBloodPressure.asStateFlow()
 
     /* -----------------------------
      * Internal mutable state
@@ -64,7 +61,7 @@ class PowerStats(private val context: Context, private val logger: ILogger) {
     private val _lastChargingEndBattery = MutableStateFlow<Int?>(null)
     private val _batteryLevel = MutableStateFlow<Int?>(null)
 
-    private val _aratedBloodPressure = MutableStateFlow<Int?>(null)
+    private val _aeratedBloodPressure = MutableStateFlow<Int?>(null)
 
     val chargeDateTime: StateFlow<LocalDateTime?> = _lastChargingTimeMs
         .map { ms ->
@@ -141,8 +138,8 @@ class PowerStats(private val context: Context, private val logger: ILogger) {
         val lastChargingEndBattery = payload[28].toInt() and 0xFF
         val batteryLevel = payload[29].toInt() and 0xFF
 
-        /* ---- arated blood pressure ---- */
-        val aratedBloodPressure =
+        /* ---- aerated blood pressure ---- */
+        val aeratedBloodPressure =
             (payload[30].toInt() and 0xFF) or
                     ((payload[31].toInt() and 0xFF) shl 8) or
                     ((payload[32].toInt() and 0xFF) shl 16) or
@@ -161,6 +158,6 @@ class PowerStats(private val context: Context, private val logger: ILogger) {
         _lastChargingEndBattery.value = lastChargingEndBattery
         _batteryLevel.value = batteryLevel
 
-        _aratedBloodPressure.value = aratedBloodPressure
+        _aeratedBloodPressure.value = aeratedBloodPressure
     }
 }
