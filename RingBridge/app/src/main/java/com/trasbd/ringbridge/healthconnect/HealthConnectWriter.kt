@@ -11,23 +11,35 @@ import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Device.Companion.TYPE_RING
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.units.Percentage
+import com.trasbd.lib.ILogger
 import com.trasbd.ringbridge.protocol.HealthSession
-import com.trasbd.lib.uiLogger.UiLogger
 import java.time.Instant
 
 class HealthConnectWriter(
     private val client: HealthConnectClient,
-    private val logger: UiLogger
+    private val logger: ILogger
 ) {
     suspend fun write(data: Any): Boolean {
         return when (data) {
             is HealthSession.SleepResult -> writeSleep(data)
             is HealthSession.HealthHistoryResult -> writeHealth(data)
-            else -> false
+            is HealthSession.LiveHRSession -> writeLiveHR(data)
+            else -> {
+
+                logger.e("RingBridge","No HealthConnect writer for ${data::class.simpleName}")
+                return false
+            }
         }
     }
 
-    private suspend fun writeHealth(data: HealthSession.HealthHistoryResult): Boolean { val records = mutableListOf<Record>()
+    private suspend fun writeLiveHR(data: HealthSession.LiveHRSession): Boolean {
+        val meta = Metadata.autoRecorded(Device(TYPE_RING))
+        val record = data.toHeartRateRecord(meta)
+        return postToHealthConnect(listOf(record))
+    }
+
+    private suspend fun writeHealth(data: HealthSession.HealthHistoryResult): Boolean {
+        val records = mutableListOf<Record>()
 
         data.data.forEach { session ->
             val start = Instant.ofEpochMilli(session.startTime)
@@ -62,11 +74,6 @@ class HealthConnectWriter(
             }
         }
 
-        if (records.isEmpty()) {
-            logger.log("RingBridge", "⚠️ No records to insert")
-            return false
-        }
-
         return postToHealthConnect(records)
     }
     private suspend fun writeSleep(data: HealthSession.SleepResult): Boolean {
@@ -91,22 +98,24 @@ class HealthConnectWriter(
         }
 
 
-        if (sessions.isEmpty()) {
-            logger.log("RingBridge", "⚠️ No records to insert")
-            return false
-        }
+
 
 
         return postToHealthConnect(sessions)
     }
     private suspend fun postToHealthConnect(records: List<Record>): Boolean {
+        if (records.isEmpty()) {
+            logger.w("RingBridge", "⚠️ No records to insert")
+            return false
+        }
+
         try {
             client.insertRecords(records)
-            logger.log("RingBridge", "✅ Posted ${records.size} records")
+            logger.i("RingBridge", "✅ Posted ${records.size} records")
 
 
         } catch (e: Exception) {
-            logger.log("RingBridge", "❌ Health Connect insert failed: ${e.message}")
+            logger.e("RingBridge", "❌ Health Connect insert failed: ${e.message}")
             e.printStackTrace()
             return false
         }
