@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
                     onRequestHealthConnectPermission = { lifecycleScope.launch { healthConnectPermissions.request() } },
                     onRequestBLEPermission = { lifecycleScope.launch { blePermissions.request() } },
                     onConnect = { ring.connect() },
-                    onRequestBattery = {ring.requestBatteryData()},
+                    onRequestBattery = { ring.requestBatteryData() },
                     onRequestHealth = { ring.requestHealthData() },
                     onRequestSleep = { ring.requestSleepData() },
                     logger = logger

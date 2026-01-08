@@ -16,8 +16,7 @@ import com.trasbd.ringbridge.protocol.HealthSession
 import java.time.Instant
 
 class HealthConnectWriter(
-    private val client: HealthConnectClient,
-    private val logger: ILogger
+    private val client: HealthConnectClient, private val logger: ILogger
 ) {
     suspend fun write(data: Any): Boolean {
         return when (data) {
@@ -26,7 +25,7 @@ class HealthConnectWriter(
             is HealthSession.LiveHRSession -> writeLiveHR(data)
             else -> {
 
-                logger.e("RingBridge","No HealthConnect writer for ${data::class.simpleName}")
+                logger.e("RingBridge", "No HealthConnect writer for ${data::class.simpleName}")
                 return false
             }
         }
@@ -76,6 +75,7 @@ class HealthConnectWriter(
 
         return postToHealthConnect(records)
     }
+
     private suspend fun writeSleep(data: HealthSession.SleepResult): Boolean {
         val sessions = mutableListOf<SleepSessionRecord>()
         data.data.forEach { it ->
@@ -103,6 +103,7 @@ class HealthConnectWriter(
 
         return postToHealthConnect(sessions)
     }
+
     private suspend fun postToHealthConnect(records: List<Record>): Boolean {
         if (records.isEmpty()) {
             logger.w("RingBridge", "⚠️ No records to insert")

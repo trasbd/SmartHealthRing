@@ -31,24 +31,22 @@ fun RingStatusCard(
     onRequestHealth: () -> Unit,
     onRequestSleep: () -> Unit,
     blePermissionState: PermissionModel.PermissionState
-) {
-    /* ---------------- Ring Connection ---------------- */
+) {/* ---------------- Ring Connection ---------------- */
 
     Card {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(text = "Ring Status", style = MaterialTheme.typography.titleMedium)
 
             StatusRow(
-                text = if (!isConnected) "Not Connected"  else if(!isReady) "Connecting..." else "Ring Connected",
-                icon = if (!isConnected) "🔴" else if(!isReady) "\uD83D\uDFE1" else "🟢"
+                text = if (!isConnected) "Not Connected" else if (!isReady) "Connecting..." else "Ring Connected",
+                icon = if (!isConnected) "🔴" else if (!isReady) "\uD83D\uDFE1" else "🟢"
             )
 
 
             /* ---------------- Ring Battery Status ---------------- */
-            if (isConnected && (batteryLevel!= null)) {
+            if (isConnected && (batteryLevel != null)) {
 
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(
@@ -71,7 +69,9 @@ fun RingStatusCard(
                     // Visual progress bar for the battery
                     LinearProgressIndicator(
                         progress = { batteryLevel / 100f },
-                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp),
                         color = if (batteryLevel > 20) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                         strokeCap = StrokeCap.Round,
@@ -129,19 +129,16 @@ fun RingStatusCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
-            )
-            {
+            ) {
                 Button(
-                    onClick = onRequestSleep,
-                    enabled = false,
+                    onClick = onRequestSleep, enabled = false,
                     //enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Start HR")
                 }
                 Button(
-                    onClick = onRequestHealth,
-                    enabled = false,
+                    onClick = onRequestHealth, enabled = false,
                     //enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f) // Makes button fill other half
                 ) {
@@ -153,21 +150,20 @@ fun RingStatusCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
-            )
-            {
+            ) {
                 Button(
-                    onClick = onRequestSleep,
-                    enabled = false,
+                    onClick = onRequestSleep, enabled = false,
                     //enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Set Time")
                 }
                 Button(
-                    onClick = onRequestHealth,
-                    enabled = false,
+                    onClick = onRequestHealth, enabled = false,
                     //enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
-                    modifier = Modifier.weight(1f).alpha(0f) // Makes button fill other half
+                    modifier = Modifier
+                        .weight(1f)
+                        .alpha(0f) // Makes button fill other half
                 ) {
                     Text("")
                 }

@@ -303,14 +303,18 @@ class RingClient(
         sendCmd(cmd(PowerStats.POWER_GROUP, PowerStats.POWER_TYPE))
     }
 
-    fun startLiveHRSession()
-    {
-        sendCmd(cmd(HealthSession.HR_LIVE_CMD_GROUP, HealthSession.HR_LIVE_CMD_TYPE), HealthSession.HR_LIVE_START_PAYLOAD)
+    fun startLiveHRSession() {
+        sendCmd(
+            cmd(HealthSession.HR_LIVE_CMD_GROUP, HealthSession.HR_LIVE_CMD_TYPE),
+            HealthSession.HR_LIVE_START_PAYLOAD
+        )
     }
 
-    fun stopLiveHRSession()
-    {
-        sendCmd(cmd(HealthSession.HR_LIVE_CMD_GROUP, HealthSession.HR_LIVE_CMD_TYPE), HealthSession.HR_LIVE_STOP_PAYLOAD)
+    fun stopLiveHRSession() {
+        sendCmd(
+            cmd(HealthSession.HR_LIVE_CMD_GROUP, HealthSession.HR_LIVE_CMD_TYPE),
+            HealthSession.HR_LIVE_STOP_PAYLOAD
+        )
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)

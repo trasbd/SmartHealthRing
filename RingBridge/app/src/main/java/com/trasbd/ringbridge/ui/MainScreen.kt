@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import com.trasbd.lib.permission.PermissionModel
 import com.trasbd.lib.uiLogger.LogConsole
 import com.trasbd.lib.uiLogger.UiLogger
-import com.trasbd.ringbridge.permission.BluetoothPermission
 import java.time.LocalDateTime
 
 @Composable
@@ -38,14 +37,13 @@ fun MainScreen(
     onRequestHealth: () -> Unit,
     onRequestSleep: () -> Unit,
     logger: UiLogger
-)
-{
+) {
     Scaffold { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp,),
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Fixed header
@@ -77,22 +75,29 @@ fun MainScreen(
                             Modifier.weight(1f)
                         )
                     }
-                    Row() {
-                    RingStatusCard(isConnected, isReady, batteryLevel, chargeDateTime, onConnect, onRequestBattery, onRequestHealth, onRequestSleep, blePermissionState)
+                    Row {
+                        RingStatusCard(
+                            isConnected,
+                            isReady,
+                            batteryLevel,
+                            chargeDateTime,
+                            onConnect,
+                            onRequestBattery,
+                            onRequestHealth,
+                            onRequestSleep,
+                            blePermissionState
+                        )
+                    }
                 }
-                }
 
 
-                }
-
-
+            }
 
 
             // 🔒 Fixed console
             Card {
                 LogConsole(
-                    logs = logger.lines,
-                    modifier = Modifier
+                    logs = logger.lines, modifier = Modifier
                         .fillMaxWidth()
                         .height(170.dp)
                 )

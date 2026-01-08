@@ -52,8 +52,11 @@ class HealthSession(logger: ILogger) {
     var start: Instant? = null
     var end: Instant? = null
 
-    fun ingest(group:Int, subtype: Int, payload: ByteArray) {
-        if ((HEALTH_TYPES.contains(subtype)&& group == HEALTH_GROUP) || (group == HR_LIVE_GROUP && subtype == HR_LIVE_CMD_TYPE && payload.contentEquals(HR_LIVE_START_PAYLOAD))) {
+    fun ingest(group: Int, subtype: Int, payload: ByteArray) {
+        if ((HEALTH_TYPES.contains(subtype) && group == HEALTH_GROUP) || (group == HR_LIVE_GROUP && subtype == HR_LIVE_CMD_TYPE && payload.contentEquals(
+                HR_LIVE_START_PAYLOAD
+            ))
+        ) {
             start = Instant.now()
             healthType = RingClient.cmd(group, subtype)
             blocks = mutableListOf()
@@ -65,7 +68,10 @@ class HealthSession(logger: ILogger) {
             return
         }
 
-        if ((group == HR_LIVE_GROUP && subtype == HR_LIVE_CMD_TYPE && payload.contentEquals(HR_LIVE_STOP_PAYLOAD))) {
+        if ((group == HR_LIVE_GROUP && subtype == HR_LIVE_CMD_TYPE && payload.contentEquals(
+                HR_LIVE_STOP_PAYLOAD
+            ))
+        ) {
             end = Instant.now()
             complete = true
             return
@@ -99,14 +105,26 @@ class HealthSession(logger: ILogger) {
         return when (healthType) {
             RingClient.cmd(HEALTH_GROUP, SLEEP_HEALTH_TYPE) -> unpackSleepData(raw, healthType)
             RingClient.cmd(HEALTH_GROUP, ALL_HEALTH_TYPE) -> unpackHealthHistoryAll(raw, healthType)
-            RingClient.cmd(HR_LIVE_CMD_GROUP, HR_LIVE_CMD_TYPE) -> unpackLiveHRData(raw, healthType, start, end)
+            RingClient.cmd(HR_LIVE_CMD_GROUP, HR_LIVE_CMD_TYPE) -> unpackLiveHRData(
+                raw,
+                healthType,
+                start,
+                end
+            )
+
             else -> throw NotImplementedError(
                 "Health type $healthType not implemented yet"
             )
         }
     }
 
-    private fun unpackLiveHRData(raw: ByteArray, healthType: Int, start: Instant?, end: Instant? = Instant.now()): LiveHRSession {
+    @Suppress("unused")
+    private fun unpackLiveHRData(
+        raw: ByteArray,
+        healthType: Int,
+        start: Instant?,
+        end: Instant? = Instant.now()
+    ): LiveHRSession {
 
         requireNotNull(start)
         requireNotNull(end)
@@ -114,7 +132,7 @@ class HealthSession(logger: ILogger) {
             "Live HR end must be after start (start=$start, end=$end)"
         }
 
-        return LiveHRSession(start, end,  raw.map { it.toInt() and 0xFF })
+        return LiveHRSession(start, end, raw.map { it.toInt() and 0xFF })
     }
 
 
@@ -145,8 +163,7 @@ class HealthSession(logger: ILogger) {
             val startDateTime = dateFormat.format(Date(startTime))
 
             // ---- fields (EXACT mapping) ----
-            val stepValue =
-                (raw[i + 4].toInt() and 0xFF) or ((raw[i + 5].toInt() and 0xFF) shl 8)
+            val stepValue = (raw[i + 4].toInt() and 0xFF) or ((raw[i + 5].toInt() and 0xFF) shl 8)
 
             val heartValue = raw[i + 6].toInt() and 0xFF
             val sbpValue = raw[i + 7].toInt() and 0xFF   // unused
@@ -200,8 +217,7 @@ class HealthSession(logger: ILogger) {
             val sessionStart = i
 
             // ---- session header ----
-            val sessionLen =
-                (raw[i + 2].toInt() and 0xFF) or ((raw[i + 3].toInt() and 0xFF) shl 8)
+            val sessionLen = (raw[i + 2].toInt() and 0xFF) or ((raw[i + 3].toInt() and 0xFF) shl 8)
 
             val startSec =
                 (raw[i + 4].toInt() and 0xFF) or ((raw[i + 5].toInt() and 0xFF) shl 8) or ((raw[i + 6].toInt() and 0xFF) shl 16) or ((raw[i + 7].toInt() and 0xFF) shl 24)
@@ -226,11 +242,9 @@ class HealthSession(logger: ILogger) {
             val lightCount: Int
 
             if (deepSleepCount == 0xFFFF) {
-                remTotal =
-                    (raw[i + 14].toInt() and 0xFF) or ((raw[i + 15].toInt() and 0xFF) shl 8)
+                remTotal = (raw[i + 14].toInt() and 0xFF) or ((raw[i + 15].toInt() and 0xFF) shl 8)
 
-                deepTotal =
-                    (raw[i + 16].toInt() and 0xFF) or ((raw[i + 17].toInt() and 0xFF) shl 8)
+                deepTotal = (raw[i + 16].toInt() and 0xFF) or ((raw[i + 17].toInt() and 0xFF) shl 8)
 
                 lightTotal =
                     (raw[i + 18].toInt() and 0xFF) or ((raw[i + 19].toInt() and 0xFF) shl 8)
@@ -316,9 +330,7 @@ class HealthSession(logger: ILogger) {
     }
 
     data class LiveHRSession(
-        val startTime: Instant,
-        val endTime: Instant,
-        val heartValues: List<Int>
+        val startTime: Instant, val endTime: Instant, val heartValues: List<Int>
     )
 
     data class HealthHistoryRecord(

@@ -2,9 +2,7 @@ package com.trasbd.ringbridge.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +19,7 @@ fun PermissionCard(
     onRequestPermission: () -> Unit,
     modifier: Modifier
 ) {
-    Card (modifier){
+    Card(modifier) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Button(
@@ -29,10 +27,8 @@ fun PermissionCard(
                 onClick = onRequestPermission
             ) {
                 Text(
-                    if (permissionState == PermissionModel.PermissionState.GRANTED)
-                        "Granted"
-                    else
-                        "Grant Permission"
+                    if (permissionState == PermissionModel.PermissionState.GRANTED) "Granted"
+                    else "Grant Permission"
                 )
             }
         }

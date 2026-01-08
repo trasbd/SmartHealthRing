@@ -33,9 +33,10 @@ open class BluetoothPermissionModel(
     }
 
     override suspend fun request(): PermissionState {
-        when(permissionState)
-        {
-            PermissionState.UNKNOWN, PermissionState.DENIED, PermissionState.PARTIAL -> permissionLauncher.launch(permissionList)
+        when (permissionState) {
+            PermissionState.UNKNOWN, PermissionState.DENIED, PermissionState.PARTIAL -> 
+                permissionLauncher.launch(permissionList)
+
             else -> openAppSettings()
         }
 
