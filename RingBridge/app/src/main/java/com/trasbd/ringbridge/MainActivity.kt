@@ -19,6 +19,8 @@ import com.trasbd.ringbridge.healthconnect.HealthConnectWriter
 import com.trasbd.ringbridge.permission.BluetoothPermission
 import com.trasbd.ringbridge.permission.HealthConnectPermission
 import com.trasbd.ringbridge.ui.MainScreen
+import com.trasbd.ringbridge.ui.model.PermissionUiModel
+import com.trasbd.ringbridge.ui.model.RingUiModel
 import com.trasbd.ringbridge.ui.theme.RingBridgeTheme
 import kotlinx.coroutines.launch
 
@@ -82,20 +84,28 @@ class MainActivity : ComponentActivity() {
                 val isReady by ring.isReady.collectAsState()
                 val batteryLevel by ring.batteryLevel.collectAsState()
                 val chargeDate by ring.chargeDateTime.collectAsState()
+
+                val blePermission = PermissionUiModel(
+                    bleState.value,
+                    { lifecycleScope.launch { blePermissions.request() } })
+                val hcPermission = PermissionUiModel(
+                    hcState.value,
+                    { lifecycleScope.launch { healthConnectPermissions.request() } })
+                val ringUi = RingUiModel(
+                    isConnected,
+                    isReady,
+                    batteryLevel,
+                    chargeDate,
+                    { ring.connect() },
+                    { ring.requestBatteryData() },
+                    { ring.requestHealthData() },
+                    { ring.requestSleepData() },
+                    { ring.startLiveHRSession() },
+                    { ring.stopLiveHRSession() })
+
+
                 @SuppressLint("MissingPermission") MainScreen(
-                    blePermissionState = bleState.value,
-                    healthConnectPermissionState = hcState.value,
-                    isConnected = isConnected,
-                    isReady = isReady,
-                    batteryLevel = batteryLevel,
-                    chargeDateTime = chargeDate,
-                    onRequestHealthConnectPermission = { lifecycleScope.launch { healthConnectPermissions.request() } },
-                    onRequestBLEPermission = { lifecycleScope.launch { blePermissions.request() } },
-                    onConnect = { ring.connect() },
-                    onRequestBattery = { ring.requestBatteryData() },
-                    onRequestHealth = { ring.requestHealthData() },
-                    onRequestSleep = { ring.requestSleepData() },
-                    logger = logger
+                    blePermission, hcPermission, ringUi, logger = logger
                 )
             }
         }

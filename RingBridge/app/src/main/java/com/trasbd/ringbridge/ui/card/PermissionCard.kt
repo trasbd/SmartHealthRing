@@ -1,4 +1,4 @@
-package com.trasbd.ringbridge.ui
+package com.trasbd.ringbridge.ui.card
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,23 +11,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.trasbd.lib.permission.PermissionModel
+import com.trasbd.ringbridge.ui.model.PermissionUiModel
 
 @Composable
 fun PermissionCard(
     title: String,
-    permissionState: PermissionModel.PermissionState,
-    onRequestPermission: () -> Unit,
+    permissionModel: PermissionUiModel,
     modifier: Modifier
 ) {
     Card(modifier) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Button(
-                enabled = permissionState != PermissionModel.PermissionState.GRANTED,
-                onClick = onRequestPermission
+                enabled = permissionModel.permissionState != PermissionModel.PermissionState.GRANTED,
+                onClick = permissionModel.onRequestPermission
             ) {
                 Text(
-                    if (permissionState == PermissionModel.PermissionState.GRANTED) "Granted"
+                    if (permissionModel.permissionState == PermissionModel.PermissionState.GRANTED) "Granted"
                     else "Grant Permission"
                 )
             }

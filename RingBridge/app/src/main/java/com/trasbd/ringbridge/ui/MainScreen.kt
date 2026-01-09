@@ -17,25 +17,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.trasbd.lib.permission.PermissionModel
 import com.trasbd.lib.uiLogger.LogConsole
 import com.trasbd.lib.uiLogger.UiLogger
-import java.time.LocalDateTime
+import com.trasbd.ringbridge.ui.card.PermissionCard
+import com.trasbd.ringbridge.ui.card.RingStatusCard
+import com.trasbd.ringbridge.ui.model.PermissionUiModel
+import com.trasbd.ringbridge.ui.model.RingUiModel
 
 @Composable
 fun MainScreen(
-    blePermissionState: PermissionModel.PermissionState,
-    healthConnectPermissionState: PermissionModel.PermissionState,
-    isConnected: Boolean,
-    isReady: Boolean,
-    batteryLevel: Int?,
-    chargeDateTime: LocalDateTime?,
-    onRequestHealthConnectPermission: () -> Unit,
-    onRequestBLEPermission: () -> Unit,
-    onConnect: () -> Unit,
-    onRequestBattery: () -> Unit,
-    onRequestHealth: () -> Unit,
-    onRequestSleep: () -> Unit,
+
+    blePermission: PermissionUiModel,
+    healthConnectPermission: PermissionUiModel,
+    ringUiModel: RingUiModel,
+
     logger: UiLogger
 ) {
     Scaffold { padding ->
@@ -46,9 +41,7 @@ fun MainScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Fixed header
             Text("Ring Bridge", style = MaterialTheme.typography.headlineMedium)
-
 
             Box(
                 modifier = Modifier
@@ -64,37 +57,25 @@ fun MainScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PermissionCard(
                             "Bluetooth Permission",
-                            blePermissionState,
-                            onRequestBLEPermission,
+                            blePermission,
                             Modifier.weight(1f)
                         )
                         PermissionCard(
                             "HealthConnect Permissions",
-                            healthConnectPermissionState,
-                            onRequestHealthConnectPermission,
+                            healthConnectPermission,
                             Modifier.weight(1f)
                         )
                     }
                     Row {
                         RingStatusCard(
-                            isConnected,
-                            isReady,
-                            batteryLevel,
-                            chargeDateTime,
-                            onConnect,
-                            onRequestBattery,
-                            onRequestHealth,
-                            onRequestSleep,
-                            blePermissionState
+                            ringUiModel,
+                            blePermission.permissionState
                         )
                     }
                 }
 
-
             }
 
-
-            // 🔒 Fixed console
             Card {
                 LogConsole(
                     logs = logger.lines, modifier = Modifier

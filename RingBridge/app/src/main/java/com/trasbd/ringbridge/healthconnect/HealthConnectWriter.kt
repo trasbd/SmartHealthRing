@@ -96,11 +96,6 @@ class HealthConnectWriter(
             sessions.add(SleepSessionRecord(start, null, end, null, meta, null, null, segments))
 
         }
-
-
-
-
-
         return postToHealthConnect(sessions)
     }
 

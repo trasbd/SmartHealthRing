@@ -1,4 +1,4 @@
-package com.trasbd.ringbridge.ui
+package com.trasbd.ringbridge.ui.card
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,35 +18,30 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import com.trasbd.lib.permission.PermissionModel
-import java.time.LocalDateTime
+import com.trasbd.ringbridge.ui.StatusRow
+import com.trasbd.ringbridge.ui.model.RingUiModel
 
 @Composable
 fun RingStatusCard(
-    isConnected: Boolean,
-    isReady: Boolean,
-    batteryLevel: Int?,
-    chargeDateTime: LocalDateTime?,
-    onConnect: () -> Unit,
-    onRequestBattery: () -> Unit,
-    onRequestHealth: () -> Unit,
-    onRequestSleep: () -> Unit,
-    blePermissionState: PermissionModel.PermissionState
-) {/* ---------------- Ring Connection ---------------- */
+    ring: RingUiModel,
+    blePermissionState: PermissionModel.PermissionState,
+    modifier: Modifier = Modifier
 
+) {
     Card {
         Column(
-            modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(text = "Ring Status", style = MaterialTheme.typography.titleMedium)
 
             StatusRow(
-                text = if (!isConnected) "Not Connected" else if (!isReady) "Connecting..." else "Ring Connected",
-                icon = if (!isConnected) "🔴" else if (!isReady) "\uD83D\uDFE1" else "🟢"
+                text = if (!ring.isConnected) "Not Connected" else if (!ring.isReady) "Connecting..." else "Ring Connected",
+                icon = if (!ring.isConnected) "🔴" else if (!ring.isReady) "\uD83D\uDFE1" else "🟢"
             )
 
 
             /* ---------------- Ring Battery Status ---------------- */
-            if (isConnected && (batteryLevel != null)) {
+            if (ring.isConnected && (ring.batteryLevel != null)) {
 
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(
@@ -55,24 +50,24 @@ fun RingStatusCard(
                     ) {
                         // Pick an icon based on battery level
                         val batteryIcon = when {
-                            batteryLevel > 80 -> "🔋"
-                            batteryLevel > 20 -> "🪫"
+                            ring.batteryLevel > 80 -> "🔋"
+                            ring.batteryLevel > 20 -> "🪫"
                             else -> "⚠️"
                         }
                         Text(text = batteryIcon)
                         Text(
-                            text = "Battery: $batteryLevel%",
+                            text = "Battery: ${ring.batteryLevel}%",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
 
                     // Visual progress bar for the battery
                     LinearProgressIndicator(
-                        progress = { batteryLevel / 100f },
+                        progress = { ring.batteryLevel / 100f },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp),
-                        color = if (batteryLevel > 20) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        color = if (ring.batteryLevel > 20) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                         strokeCap = StrokeCap.Round,
                     )
@@ -86,22 +81,21 @@ fun RingStatusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = onConnect,
-                    enabled = blePermissionState == PermissionModel.PermissionState.GRANTED && !isConnected,
+                    onClick = ring.onConnect,
+                    enabled = blePermissionState == PermissionModel.PermissionState.GRANTED && !ring.isConnected,
                     modifier = Modifier.weight(1f) // Makes button fill half the row
                 ) {
                     Text("Connect")
                 }
 
                 Button(
-                    onClick = onRequestBattery,
-                    enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
+                    onClick = ring.onRequestBattery,
+                    enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Battery Data")
                 }
-                // Empty space or another button to keep the grid look
-                //Spacer(modifier = Modifier.weight(1f))
+
 
             }
 
@@ -111,15 +105,15 @@ fun RingStatusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = onRequestSleep,
-                    enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
+                    onClick = ring.onRequestSleep,
+                    enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Sleep Data")
                 }
                 Button(
-                    onClick = onRequestHealth,
-                    enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
+                    onClick = ring.onRequestHealth,
+                    enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f) // Makes button fill other half
                 ) {
                     Text("Health Data")
@@ -131,15 +125,15 @@ fun RingStatusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = onRequestSleep, enabled = false,
-                    //enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
+                    onClick = ring.onLiveHRStart,
+                    enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Start HR")
                 }
                 Button(
-                    onClick = onRequestHealth, enabled = false,
-                    //enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
+                    onClick = ring.onLiveHRStop,
+                    enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f) // Makes button fill other half
                 ) {
                     Text("Stop HR")
@@ -152,15 +146,17 @@ fun RingStatusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = onRequestSleep, enabled = false,
-                    //enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
+                    onClick = ring.onLiveHRStart, enabled=false,
+                    //enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Set Time")
                 }
+                // Empty space or another button to keep the grid look
+                //Spacer(modifier = Modifier.weight(1f))
                 Button(
-                    onClick = onRequestHealth, enabled = false,
-                    //enabled = isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
+                    onClick = ring.onRequestHealth,
+                    enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier
                         .weight(1f)
                         .alpha(0f) // Makes button fill other half

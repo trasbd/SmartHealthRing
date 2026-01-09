@@ -236,7 +236,6 @@ class SmartHealthR99:
                 self.send_queue.popleft()
                 self.cmd_ack = True
 
-        
         match group:
             case 1:
                 self._handle_group_1(subtype, payload)
@@ -249,7 +248,7 @@ class SmartHealthR99:
                     popped = True
 
             case _:
-                print(f'{group} {subtype} ' + " ".join(f"{b:02X}" for b in payload))
+                print(f"{group} {subtype} " + " ".join(f"{b:02X}" for b in payload))
 
             # 🔑 THIS IS THE PUMP
         if popped and self.send_queue:
@@ -800,16 +799,16 @@ async def main():
     ring = SmartHealthR99("07:35:00:01:8A:EC", mtu=185)
     await ring.connect()
 
-    #await ring.send_cmd(549)
+    # await ring.send_cmd(549)
 
     # await ring.send_cmd(1284)
     # await ring.send_cmd(1289)
     # await ring.send_cmd(512, bytes([71, 67]))
-    await ring.send_cmd(815, bytes([1,0]) )
+    await ring.send_cmd(815, bytes([1, 0]))
 
     print("📡 Requests sent, watching for notifications...")
     await asyncio.sleep(30)
-    await ring.send_cmd(815, bytes([0,0]) )
+    await ring.send_cmd(815, bytes([0, 0]))
     await asyncio.sleep(5)
 
     print(ring.send_queue)

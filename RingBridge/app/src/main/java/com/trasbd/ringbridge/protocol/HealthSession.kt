@@ -53,9 +53,8 @@ class HealthSession(logger: ILogger) {
     var end: Instant? = null
 
     fun ingest(group: Int, subtype: Int, payload: ByteArray) {
-        if ((HEALTH_TYPES.contains(subtype) && group == HEALTH_GROUP) || (group == HR_LIVE_GROUP && subtype == HR_LIVE_CMD_TYPE && payload.contentEquals(
-                HR_LIVE_START_PAYLOAD
-            ))
+        if ((HEALTH_TYPES.contains(subtype) && group == HEALTH_GROUP) ||
+            (group == HR_LIVE_CMD_GROUP && subtype == HR_LIVE_CMD_TYPE && healthType == null)
         ) {
             start = Instant.now()
             healthType = RingClient.cmd(group, subtype)
@@ -68,10 +67,8 @@ class HealthSession(logger: ILogger) {
             return
         }
 
-        if ((group == HR_LIVE_GROUP && subtype == HR_LIVE_CMD_TYPE && payload.contentEquals(
-                HR_LIVE_STOP_PAYLOAD
-            ))
-        ) {
+        if (group == HR_LIVE_CMD_GROUP && subtype == HR_LIVE_CMD_TYPE )
+        {
             end = Instant.now()
             complete = true
             return
