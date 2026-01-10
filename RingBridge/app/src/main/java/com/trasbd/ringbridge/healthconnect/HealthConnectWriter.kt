@@ -26,7 +26,7 @@ class HealthConnectWriter(
             else -> {
 
                 logger.e("RingBridge", "No HealthConnect writer for ${data::class.simpleName}")
-                return false
+                throw HealthConnectWriteException("Insert failed")
             }
         }
     }
@@ -111,11 +111,13 @@ class HealthConnectWriter(
 
 
         } catch (e: Exception) {
-            logger.e("RingBridge", "❌ Health Connect insert failed: ${e.message}")
-            e.printStackTrace()
-            return false
+            logger.e("RingBridge", "❌ Health Connect insert failed", e)
+            throw HealthConnectWriteException("Insert failed", e)
         }
+
         return true
 
     }
+
 }
+

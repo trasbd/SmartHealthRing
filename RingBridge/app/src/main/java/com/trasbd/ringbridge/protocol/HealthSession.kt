@@ -27,6 +27,9 @@ class HealthSession(logger: ILogger) {
         const val HR_LIVE_GROUP = 6
         const val HR_LIVE_TYPE = 1
 
+        const val HR_INTERVAL_GROUP = 1
+        const val HR_INTERVAL_TYPE = 12
+
         const val END_SUBTYPE = 128
         const val END_COMMAND = 1408
         val END_PAYLOAD = byteArrayOf()

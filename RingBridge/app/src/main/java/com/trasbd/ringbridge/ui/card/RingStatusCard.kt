@@ -146,8 +146,8 @@ fun RingStatusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = ring.onLiveHRStart, enabled=false,
-                    //enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
+                    onClick = ring.onSetTime,
+                    enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Set Time")
@@ -155,13 +155,11 @@ fun RingStatusCard(
                 // Empty space or another button to keep the grid look
                 //Spacer(modifier = Modifier.weight(1f))
                 Button(
-                    onClick = ring.onRequestHealth,
+                    onClick = ring.onTest,
                     enabled = ring.isReady && blePermissionState == PermissionModel.PermissionState.GRANTED,
-                    modifier = Modifier
-                        .weight(1f)
-                        .alpha(0f) // Makes button fill other half
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text("")
+                    Text("Test")
                 }
 
             }

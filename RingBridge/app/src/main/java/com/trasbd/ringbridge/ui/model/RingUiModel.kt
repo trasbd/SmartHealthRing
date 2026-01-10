@@ -12,5 +12,7 @@ data class RingUiModel(
     val onRequestHealth: () -> Unit,
     val onRequestSleep: () -> Unit,
     val onLiveHRStart: () -> Unit,
-    val onLiveHRStop: () -> Unit
+    val onLiveHRStop: () -> Unit,
+    val onSetTime: () -> Unit,
+    val onTest: () -> Unit
 )

@@ -16,14 +16,15 @@ import com.trasbd.ringbridge.ble.FrameCodec.buildBe94Frame
 import com.trasbd.ringbridge.ble.FrameCodec.reassembleFrame
 import com.trasbd.ringbridge.ble.FrameCodec.rxMutex
 import com.trasbd.ringbridge.healthconnect.HealthConnectWriter
+import com.trasbd.ringbridge.protocol.BleTime
 import com.trasbd.ringbridge.protocol.HealthSession
 import com.trasbd.ringbridge.protocol.PowerStats
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
+import java.time.Instant
 import java.util.UUID
 
 
@@ -31,7 +32,8 @@ class RingClient(
     private val context: Context,
     private val mac: String,
     private val healthWriter: HealthConnectWriter,
-    private val logger: ILogger
+    private val logger: ILogger,
+    private val scope: CoroutineScope
 ) {
 
     companion object {
@@ -42,6 +44,13 @@ class RingClient(
             require(type in 0..0xFF)
             return (group shl 8) or type
         }
+
+        fun decodeCmd(cmd: Int): Pair<Int, Int> {
+            val group = (cmd shr 8) and 0xFF
+            val type = cmd and 0xFF
+            return group to type
+        }
+
     }
 
     // ----- Connected -----
@@ -64,8 +73,6 @@ class RingClient(
 
     private lateinit var bluetoothGatt: BluetoothGatt
     private var cmdAck: Boolean = false
-
-    private val scope = CoroutineScope(Dispatchers.IO)
 
 
     private lateinit var be94WriteChar: BluetoothGattCharacteristic
@@ -187,7 +194,7 @@ class RingClient(
             }")
 
             // Fire-and-forget coroutine (matches asyncio.create_task)
-            CoroutineScope(Dispatchers.IO).launch {
+            scope.launch {
                 rxMutex.withLock {
                     if (value.isEmpty() || value.size < 4) return@withLock
 
@@ -266,6 +273,7 @@ class RingClient(
         }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleGroup3(subtype: Int, payload: ByteArray) {
         when (subtype) {
             HealthSession.HR_LIVE_CMD_TYPE -> {
@@ -303,6 +311,7 @@ class RingClient(
         sendCmd(cmd(PowerStats.POWER_GROUP, PowerStats.POWER_TYPE))
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun startLiveHRSession() {
         sendCmd(
             cmd(HealthSession.HR_LIVE_CMD_GROUP, HealthSession.HR_LIVE_CMD_TYPE),
@@ -310,11 +319,23 @@ class RingClient(
         )
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun stopLiveHRSession() {
         sendCmd(
             cmd(HealthSession.HR_LIVE_CMD_GROUP, HealthSession.HR_LIVE_CMD_TYPE),
             HealthSession.HR_LIVE_STOP_PAYLOAD
         )
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun setTime(time: Instant = Instant.now())
+    {
+        sendCmd(BleTime.SET_TIME_CMD, BleTime.encode(time))
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun setHRInterval(interval: Int = 30) {
+        sendCmd(cmd(HealthSession.HR_INTERVAL_GROUP, HealthSession.HR_INTERVAL_TYPE), byteArrayOf(1,interval.toByte()))
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -358,7 +379,17 @@ class RingClient(
     }
 
     private fun handleGroup1(subtype: Int, payload: ByteArray) {
-        throw NotImplementedError("Group 1 not handled")
+        when (subtype) {
+            BleTime.SET_TIME_TYPE -> {
+                logger.i("RingBridge", "✅ Time set")
+            }
+            HealthSession.HR_INTERVAL_TYPE -> {
+                logger.i("RingBridge", "✅ HR interval set")
+            }
+
+            else -> TODO("Group 1 Type $subtype not handled")
+        }
+
     }
 
     private fun handleGroup2(subtype: Int, payload: ByteArray) {
