@@ -1,9 +1,12 @@
+@file:Suppress("unused", "unused")
+
 package com.trasbd.ringbridge.protocol
 
 import com.trasbd.ringbridge.ble.RingClient
 import java.time.Instant
 import java.util.Calendar
 
+@Suppress("unused")
 object BleTime {
 
     /** Command ID used to set device time */

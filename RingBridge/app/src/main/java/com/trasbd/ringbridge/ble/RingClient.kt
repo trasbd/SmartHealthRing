@@ -263,6 +263,7 @@ class RingClient(
 
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun handleGroup6(subtype: Int, payload: ByteArray) {
         when (subtype) {
             HealthSession.HR_LIVE_TYPE -> {
@@ -378,7 +379,7 @@ class RingClient(
 
     }
 
-    private fun handleGroup1(subtype: Int, payload: ByteArray) {
+    private fun handleGroup1(subtype: Int, @Suppress("unused") payload: ByteArray) {
         when (subtype) {
             BleTime.SET_TIME_TYPE -> {
                 logger.i("RingBridge", "✅ Time set")
@@ -433,7 +434,6 @@ class RingClient(
 
         }
     }
-
 
 }
 

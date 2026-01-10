@@ -2,6 +2,7 @@ package com.trasbd.ringbridge.ble
 
 import java.util.UUID
 
+@Suppress("unused")
 object RingUuids {
     val UUID_BE94_SERVICE: UUID = UUID.fromString("be940000-7333-be46-b7ae-689e71722bd5")
 
