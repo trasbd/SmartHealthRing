@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package com.trasbd.ringbridge.protocol
 
 import android.content.Context
@@ -16,7 +18,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.TimeZone
 
-class PowerStats(private val context: Context, private val logger: ILogger) {
+class PowerStats(context: Context, private val logger: ILogger) {
 
     companion object {
         const val POWER_GROUP = 2
@@ -25,7 +27,7 @@ class PowerStats(private val context: Context, private val logger: ILogger) {
     }
 
     // 1. Create a scope that tied to the Context's lifecycle
-    // If context isn't a lifecycle owner, we fallback to a default MainScope
+    // If context isn't a lifecycle owner, we fall back to a default MainScope
     private val internalScope = context.getLifecycleScope() ?: MainScope()
 
     /* -----------------------------

@@ -2,7 +2,9 @@ package com.trasbd.ringbridge
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -11,9 +13,12 @@ import androidx.annotation.RequiresPermission
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.FileProvider
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.lifecycleScope
+import com.trasbd.lib.CompositeLogger
+import com.trasbd.lib.FileLogger
 import com.trasbd.lib.permission.PermissionModel
 import com.trasbd.lib.uiLogger.UiLogger
 import com.trasbd.lib.utilities.loggingCoroutineExceptionHandler
@@ -27,12 +32,14 @@ import com.trasbd.ringbridge.ui.model.RingUiModel
 import com.trasbd.ringbridge.ui.theme.RingBridgeTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
+import java.io.File
 import java.time.Instant
 
 class MainActivity : ComponentActivity() {
     @Suppress("PropertyName")
-    val RING_MAC = "07:35:00:01:8A:EC"
-    val logger = UiLogger()
+    val RING_MAC = Constants.RING_MAC
+    private val uiLogger = UiLogger()
+    val logger = CompositeLogger(listOf(uiLogger, FileLogger(this, Constants.SYNC_LOG_FILE)))
 
     private val coroutineExceptionHandler = loggingCoroutineExceptionHandler(logger, "RingBridge")
 
@@ -115,12 +122,13 @@ class MainActivity : ComponentActivity() {
                     { ring.startLiveHRSession() },
                     { ring.stopLiveHRSession() },
                     onSetTime = { ring.setTime(Instant.now()) },
-                    onTest = { ring.setHRInterval(10) }
+                    onTest = { ring.setHRInterval(10) },
+                    onOpenLog = { openLogFile() }
                 )
 
 
                 @SuppressLint("MissingPermission") MainScreen(
-                    blePermission, hcPermission, ringUi, logger = logger
+                    blePermission, hcPermission, ringUi, logger = uiLogger
                 )
             }
         }
@@ -132,6 +140,33 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(coroutineExceptionHandler) {
             bleState.value = blePermissions.update()
             hcState.value = healthConnectPermissions.update()
+        }
+    }
+
+
+    private fun openLogFile() {
+        val logFile = File(filesDir, Constants.SYNC_LOG_FILE)
+        if (!logFile.exists()) {
+            Toast.makeText(this, "Log file doesn't exist yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        @Suppress("SpellCheckingInspection")
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            logFile
+        )
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "text/plain")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        try {
+            startActivity(Intent.createChooser(intent, "Open Log File"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "No app found to open log file", Toast.LENGTH_SHORT).show()
+            logger.w("RingBridge", e.message ?: "No app found to open")
         }
     }
 }

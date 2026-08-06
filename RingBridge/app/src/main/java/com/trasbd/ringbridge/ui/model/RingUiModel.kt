@@ -14,5 +14,6 @@ data class RingUiModel(
     val onLiveHRStart: () -> Unit,
     val onLiveHRStop: () -> Unit,
     val onSetTime: () -> Unit,
-    val onTest: () -> Unit
+    val onTest: () -> Unit,
+    val onOpenLog: () -> Unit
 )

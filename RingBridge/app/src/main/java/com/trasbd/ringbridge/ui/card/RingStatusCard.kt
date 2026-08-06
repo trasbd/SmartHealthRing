@@ -162,6 +162,18 @@ fun RingStatusCard(
                 }
 
             }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = ring.onOpenLog,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open Log File")
+                }
+            }
         }
     }
 }

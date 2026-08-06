@@ -9,14 +9,14 @@ import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.RespiratoryRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
+import com.trasbd.lib.ILogger
 import com.trasbd.lib.permission.HealthConnectPermissionModel
-import com.trasbd.lib.uiLogger.UiLogger
 
 class HealthConnectPermission(
     context: Context,
     client: HealthConnectClient,
     permissionLauncher: ActivityResultLauncher<Set<String>>,
-    logger: UiLogger
+    logger: ILogger
 ) : HealthConnectPermissionModel(
     context, setOf(
         // Steps
