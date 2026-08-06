@@ -5,13 +5,11 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattConnectionSettings
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.Context.BLUETOOTH_SERVICE
-import android.os.Build
 import androidx.annotation.RequiresPermission
 import com.trasbd.lib.ILogger
 import com.trasbd.ringbridge.ble.FrameCodec.buildBe94Frame
@@ -321,19 +319,10 @@ class RingClient(
         val device = adapter.getRemoteDevice(mac)
         logger.i("RingBridge", "Connecting to $mac")
 
-        if (Build.VERSION.SDK_INT >= 37) {
-            val settings = BluetoothGattConnectionSettings.Builder()
-                .setAutoConnectEnabled(false)
-                .setTransport(BluetoothDevice.TRANSPORT_LE)
-                .build()
-            bluetoothGatt = device.connectGatt(settings, context.mainExecutor, gattCallback)!!
-        } else {
-            @Suppress("DEPRECATION")
-            bluetoothGatt = device.connectGatt(
-                context, false,
-                gattCallback, BluetoothDevice.TRANSPORT_LE
-            )
-        }
+        bluetoothGatt = device.connectGatt(
+            context, false,              // do NOT autoConnect
+            gattCallback, BluetoothDevice.TRANSPORT_LE
+        )
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
