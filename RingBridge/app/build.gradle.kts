@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-android {
+configure<com.android.build.api.dsl.ApplicationExtension> {
     namespace = "com.trasbd.ringbridge"
     compileSdk {
         version = release(37) {
@@ -14,8 +14,7 @@ android {
     defaultConfig {
         applicationId = "com.trasbd.ringbridge"
         minSdk = 34
-        //noinspection OldTargetApi
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
@@ -70,4 +69,3 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
 }
-
