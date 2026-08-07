@@ -1,4 +1,4 @@
-@file:Suppress("unused")
+@file:Suppress("unused", "unused")
 
 package com.trasbd.ringbridge.protocol
 

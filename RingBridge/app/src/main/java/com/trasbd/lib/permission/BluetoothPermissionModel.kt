@@ -6,13 +6,13 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.result.ActivityResultLauncher
-import com.trasbd.lib.ILogger
+import com.trasbd.lib.uiLogger.UiLogger
 
 open class BluetoothPermissionModel(
     context: Context,
     permissionList: Array<String>,
     permissionLauncher: ActivityResultLauncher<Array<String>>,
-    logger: ILogger
+    logger: UiLogger
 ) : PermissionModel<Array<String>>(
     context, permissionList, permissionLauncher, logger
 ) {

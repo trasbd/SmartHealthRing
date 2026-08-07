@@ -1,4 +1,4 @@
-@file:Suppress("SpellCheckingInspection", "UnusedVariable", "unused")
+@file:Suppress("SpellCheckingInspection")
 
 package com.trasbd.ringbridge.protocol
 
@@ -38,7 +38,7 @@ class HealthSession(logger: ILogger) {
         val DELETE_HEALTH_CMD = listOf(1344, 1346, 1347, 1348)
         const val DELETE_SLEEP_CMD = 1345
 
-        val SLEEP_TYPES = mapOf(
+        val SLEEP_TYPES = mapOf<Int, Int>(
             241 to SleepSessionRecord.STAGE_TYPE_DEEP,
             242 to SleepSessionRecord.STAGE_TYPE_LIGHT,
             243 to SleepSessionRecord.STAGE_TYPE_REM,
@@ -118,6 +118,7 @@ class HealthSession(logger: ILogger) {
         }
     }
 
+    @Suppress("unused")
     private fun unpackLiveHRData(
         raw: ByteArray,
         healthType: Int,
@@ -135,6 +136,7 @@ class HealthSession(logger: ILogger) {
     }
 
 
+    @Suppress("unused", "UnusedVariable")
     fun unpackHealthHistoryAll(
         raw: ByteArray, healthType: Int
     ): HealthHistoryResult {

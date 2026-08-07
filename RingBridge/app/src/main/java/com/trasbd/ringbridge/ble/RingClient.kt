@@ -5,13 +5,11 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattConnectionSettings
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.Context.BLUETOOTH_SERVICE
-import android.os.Build
 import androidx.annotation.RequiresPermission
 import com.trasbd.lib.ILogger
 import com.trasbd.ringbridge.ble.FrameCodec.buildBe94Frame
@@ -80,13 +78,6 @@ class RingClient(
     private lateinit var be94WriteChar: BluetoothGattCharacteristic
 
     private val sendQueue = ArrayDeque<PendingCommand>()
-
-    // Tracking for background sync
-    private var syncCompletionListener: (() -> Unit)? = null
-
-    fun setSyncCompletionListener(listener: (() -> Unit)?) {
-        syncCompletionListener = listener
-    }
 
     private val gattCallback = object : BluetoothGattCallback() {
         private val cccdQueue = ArrayDeque<Pair<BluetoothGattDescriptor, ByteArray>>()
@@ -296,17 +287,6 @@ class RingClient(
 
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun disconnect() {
-        if (::bluetoothGatt.isInitialized) {
-            bluetoothGatt.disconnect()
-            bluetoothGatt.close()
-            _isConnected.value = false
-            _isReady.value = false
-            logger.i("RingBridge", "Disconnected and closed GATT")
-        }
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun connect() {
         logger.d("RingBridge", "startBle() called")
 
@@ -321,19 +301,10 @@ class RingClient(
         val device = adapter.getRemoteDevice(mac)
         logger.i("RingBridge", "Connecting to $mac")
 
-        if (Build.VERSION.SDK_INT >= 37) {
-            val settings = BluetoothGattConnectionSettings.Builder()
-                .setAutoConnectEnabled(false)
-                .setTransport(BluetoothDevice.TRANSPORT_LE)
-                .build()
-            bluetoothGatt = device.connectGatt(settings, context.mainExecutor, gattCallback)!!
-        } else {
-            @Suppress("DEPRECATION")
-            bluetoothGatt = device.connectGatt(
-                context, false,
-                gattCallback, BluetoothDevice.TRANSPORT_LE
-            )
-        }
+        bluetoothGatt = device.connectGatt(
+            context, false,              // do NOT autoConnect
+            gattCallback, BluetoothDevice.TRANSPORT_LE
+        )
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -458,7 +429,6 @@ class RingClient(
                         }
                     }
                 }
-                syncCompletionListener?.invoke()
             }
 
 

@@ -93,10 +93,10 @@ object FrameCodec {
         for (b in data) {
             val byte = b.toInt() and 0xFF
 
-            val swapped = ((s shl 8) and 0xFF00) or ((s.ushr(8)) and 0x00FF)
+            val swapped = ((s shl 8) and 0xFF00) or ((s ushr 8) and 0x00FF)
             var s2 = swapped xor byte
 
-            s2 = s2 xor ((s2 and 0xFF).ushr(4))
+            s2 = s2 xor ((s2 and 0xFF) ushr 4)
             val s3 = s2 xor ((s2 shl 12) and 0xFFFF)
 
             s = s3 xor (((s3 and 0xFF) shl 5) and 0xFFFF)
