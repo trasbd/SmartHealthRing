@@ -1,6 +1,6 @@
 [versions]
-agp = "9.3.0"
-connectClientVersion = "1.2.0-alpha02"
+agp = "9.3.1"
+connectClientVersion = "1.2.0-alpha04"
 kotlin = "2.3.0"
 coreKtx = "1.17.0"
 junit = "4.13.2"
